@@ -1,0 +1,24 @@
+node_modules/
+.wwebjs_auth/
+.wwebjs_cache/
+runtime/
+
+# Private/local operational data
+DetallesCelular.txt
+workbooks/
+*.xlsm
+*_backup_*.xlsx
+*_backup_*.xlsm
+
+estado_envio.txt
+estado_envio.txt.tmp
+estado_programados.txt
+estado_programados.txt.tmp
+resultados_envio.tsv
+resultados_envio.tsv.tmp
+resultados_programados.tsv
+resultados_programados.tsv.tmp
+envios_programados_log.tsv
+auto_programados.log
+*.tmp
+~$*.xls*
