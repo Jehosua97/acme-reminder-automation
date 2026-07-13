@@ -7,7 +7,7 @@ $RutaLock = Join-Path $RutaRuntime 'servicio_programados.lock'
 
 if (Test-Path -LiteralPath $RutaLock) {
     $contenido = Get-Content -LiteralPath $RutaLock
-    $pidServicio = ($contenido | Select-String -Pattern '^pid=(\d+)' | ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1)
+    $pidServicio = ($contenido | Select-String -Pattern 'pid=(\d+)' | ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1)
     if ($pidServicio) {
         $pidInt = [int]$pidServicio
         taskkill.exe /PID $pidInt /T /F | Out-Null

@@ -59,7 +59,7 @@ try {
         }
     }
 
-    $ws.Range('A2:Q2').Merge() | Out-Null
+    $ws.Range('A2:R2').Merge() | Out-Null
     $ws.Range('A2').Value2 = 'MODO PRUEBA: la columna Hora permite seleccionar cualquier minuto del día. Cuando termines, ejecuta CambiarHorasModoHorasFijas.ps1 para volver a horas fijas.'
     $ws.Range('A2').WrapText = $true
 

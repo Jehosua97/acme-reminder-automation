@@ -18,6 +18,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const XLSX = require('xlsx');
 const qrcode = require('qrcode-terminal');
 const { Client, LocalAuth } = require('whatsapp-web.js');
@@ -43,7 +44,9 @@ const RUTA_ESTADO_TEMPORAL = `${RUTA_ESTADO}.tmp`;
 const RUTA_RESULTADOS = path.join(RUTA_RUNTIME, 'resultados_programados.tsv');
 const RUTA_RESULTADOS_TEMPORAL = `${RUTA_RESULTADOS}.tmp`;
 const RUTA_LOG = path.join(RUTA_RUNTIME, 'envios_programados_log.tsv');
+const RUTA_PAUSA = path.join(RUTA_RUNTIME, 'sistema_pausado.flag');
 const RUTA_SESION = path.join(PROJECT_ROOT, '.wwebjs_auth');
+const RUTA_ACTUALIZADOR_EXCEL = path.join(__dirname, 'ActualizarExcelDesdeResultados.ps1');
 
 const ACK_MINIMO_CONFIRMADO = 1;
 const TIEMPO_MAXIMO_CONFIRMACION_MS = 90000;
@@ -280,7 +283,7 @@ function registrarResultado({
 }) {
   const resultado = { fila, hoja, ok, estado, nota, fecha, ocurrencia, grupo, categoria };
   resultados.push(resultado);
-  if (MODO_AUTO && ocurrencia) agregarLogEnvio(resultado);
+  if ((MODO_AUTO || MODO_SERVICIO) && ocurrencia) agregarLogEnvio(resultado);
 }
 
 function escribirResultados() {
@@ -307,6 +310,39 @@ function escribirResultados() {
     'utf8'
   );
   fs.renameSync(RUTA_RESULTADOS_TEMPORAL, RUTA_RESULTADOS);
+}
+
+function actualizarExcelDesdeResultados() {
+  if (!fs.existsSync(RUTA_ACTUALIZADOR_EXCEL)) {
+    console.log('Aviso: no existe ActualizarExcelDesdeResultados.ps1.');
+    return;
+  }
+
+  const resultado = spawnSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      RUTA_ACTUALIZADOR_EXCEL,
+    ],
+    {
+      cwd: PROJECT_ROOT,
+      encoding: 'utf8',
+      timeout: 120000,
+    }
+  );
+
+  if (resultado.stdout && resultado.stdout.trim()) {
+    console.log(`Actualizador Excel OUT: ${resultado.stdout.trim()}`);
+  }
+  if (resultado.stderr && resultado.stderr.trim()) {
+    console.error(`Actualizador Excel ERR: ${resultado.stderr.trim()}`);
+  }
+  if (resultado.status !== 0) {
+    console.error(`Actualizador Excel exit code: ${resultado.status}`);
+  }
 }
 
 async function finalizar(ok, resumen, codigo = ok ? 0 : 1) {
@@ -370,81 +406,67 @@ function leerFilasExcel() {
   }
 
   const libro = XLSX.readFile(RUTA_EXCEL, { cellDates: false });
-  const hojasCasa = libro.SheetNames.filter((nombre) =>
-    normalizar(nombre).startsWith('CASA - ')
-  );
-  const hojasALeer =
-    hojasCasa.length > 0
-      ? hojasCasa
-      : libro.SheetNames.filter(
-          (nombre) => !['RESUMEN', 'MENSAJES BASE', 'AYUDA', 'LISTAS'].includes(normalizar(nombre))
-        );
+  const nombreHoja = 'Recordatorios Programados';
+  const hoja = libro.Sheets[nombreHoja];
 
-  const todas = [];
+  if (!hoja) {
+    throw new Error(`No se encontro la hoja "${nombreHoja}".`);
+  }
 
-  for (const nombreHoja of hojasALeer) {
-    const hoja = libro.Sheets[nombreHoja];
-    if (!hoja) continue;
+  const filas = XLSX.utils.sheet_to_json(hoja, {
+    header: 1,
+    defval: '',
+    raw: false,
+    blankrows: true,
+  });
 
-    const filas = XLSX.utils.sheet_to_json(hoja, {
-      header: 1,
-      defval: '',
-      raw: false,
-      blankrows: true,
-    });
-
-    const indiceEncabezado = filas.findIndex((fila) => {
-      const h = fila.map((celda) => normalizar(celda));
-      const colGrupo = h.findIndex(
-        (x) => x.includes('GRUPO') || x.includes('CASA')
-      );
-      const colManual = h.findIndex((x) => x.includes('ENVIAR MANUAL'));
-      const colMensaje = h.findIndex((x) => x.includes('MENSAJE'));
-      return colGrupo !== -1 && colManual !== -1 && colMensaje !== -1;
-    });
-
-    if (indiceEncabezado === -1) continue;
-
-    const h = filas[indiceEncabezado].map((celda) => normalizar(celda));
-    const colGrupo = h.findIndex((x) => x.includes('GRUPO') || x.includes('CASA'));
-    const colCategoria = h.findIndex((x) => x.includes('CATEGORIA'));
-    const colProgramacion = h.findIndex((x) => x.includes('PROGRAMACION'));
-    const colHora = h.findIndex((x) => x.includes('HORA'));
-    const colActivo = h.findIndex((x) => x.includes('ACTIVO'));
+  const indiceEncabezado = filas.findIndex((fila) => {
+    const h = fila.map((celda) => normalizar(celda));
+    const colGrupo = h.findIndex(
+      (x) => x.includes('GRUPO') || x.includes('CASA')
+    );
     const colManual = h.findIndex((x) => x.includes('ENVIAR MANUAL'));
-    const colProximo = h.findIndex((x) => x.includes('PROXIMO ENVIO'));
     const colMensaje = h.findIndex((x) => x.includes('MENSAJE'));
+    return colGrupo !== -1 && colManual !== -1 && colMensaje !== -1;
+  });
 
-    const filasHoja = filas
-      .slice(indiceEncabezado + 1)
-      .map((fila, i) => ({
-        hoja: nombreHoja,
-        numeroFila: indiceEncabezado + i + 2,
-        grupo: texto(fila[colGrupo]).trim(),
-        categoria: colCategoria === -1 ? '' : texto(fila[colCategoria]).trim(),
-        programacion:
-          colProgramacion === -1 ? '' : texto(fila[colProgramacion]).trim(),
-        hora: colHora === -1 ? '' : texto(fila[colHora]).trim(),
-        activo: colActivo === -1 ? '' : texto(fila[colActivo]).trim(),
-        enviarManual: texto(fila[colManual]).trim(),
-        proximoEnvio: colProximo === -1 ? '' : texto(fila[colProximo]).trim(),
-        mensaje: texto(fila[colMensaje]).trim(),
-      }))
-      .filter(
-        (fila) =>
-          fila.grupo &&
-          !fila.grupo.startsWith('CASA / GRUPO:') &&
-          fila.mensaje
-      );
-
-    todas.push(...filasHoja);
+  if (indiceEncabezado === -1) {
+    throw new Error(
+      'No se encontraron encabezados Casa/Grupo, Enviar manual y Mensaje.'
+    );
   }
 
-  if (todas.length === 0) {
-    throw new Error('No se encontraron hojas con recordatorios válidos.');
-  }
+  const h = filas[indiceEncabezado].map((celda) => normalizar(celda));
+  const colGrupo = h.findIndex((x) => x.includes('GRUPO') || x.includes('CASA'));
+  const colCategoria = h.findIndex((x) => x.includes('CATEGORIA'));
+  const colProgramacion = h.findIndex((x) => x.includes('PROGRAMACION'));
+  const colHora = h.findIndex((x) => x.includes('HORA'));
+  const colActivo = h.findIndex((x) => x.includes('ACTIVO'));
+  const colManual = h.findIndex((x) => x.includes('ENVIAR MANUAL'));
+  const colProximo = h.findIndex((x) => x.includes('PROXIMO ENVIO'));
+  const colMensaje = h.findIndex((x) => x.includes('MENSAJE'));
 
-  return todas;
+  return filas
+    .slice(indiceEncabezado + 1)
+    .map((fila, i) => ({
+      hoja: nombreHoja,
+      numeroFila: indiceEncabezado + i + 2,
+      grupo: texto(fila[colGrupo]).trim(),
+      categoria: colCategoria === -1 ? '' : texto(fila[colCategoria]).trim(),
+      programacion:
+        colProgramacion === -1 ? '' : texto(fila[colProgramacion]).trim(),
+      hora: colHora === -1 ? '' : texto(fila[colHora]).trim(),
+      activo: colActivo === -1 ? '' : texto(fila[colActivo]).trim(),
+      enviarManual: texto(fila[colManual]).trim(),
+      proximoEnvio: colProximo === -1 ? '' : texto(fila[colProximo]).trim(),
+      mensaje: texto(fila[colMensaje]).trim(),
+    }))
+    .filter(
+      (fila) =>
+        fila.grupo &&
+        !fila.grupo.startsWith('CASA / GRUPO:') &&
+        fila.mensaje
+    );
 }
 
 function seleccionarFilas() {
@@ -460,7 +482,17 @@ function seleccionarFilas() {
   return filas
     .filter((fila) => esSi(fila.activo))
     .map((fila) => ({ ...fila, ocurrencia: ocurrenciaProgramada(fila, ahora) }))
-    .filter((fila) => fila.ocurrencia && !yaEnviados.has(fila.ocurrencia.clave));
+    .filter((fila) => {
+      if (!fila.ocurrencia) return false;
+      if (yaEnviados.has(fila.ocurrencia.clave)) {
+        console.log(
+          `[DUPLICADO OMITIDO] Fila ${fila.numeroFila} -> "${fila.grupo}" ` +
+            `(${fila.ocurrencia.clave})`
+        );
+        return false;
+      }
+      return true;
+    });
 }
 
 async function procesarEnvios() {
@@ -611,6 +643,14 @@ async function ejecutarCicloServicio() {
   resultados = [];
 
   try {
+    if (fs.existsSync(RUTA_PAUSA)) {
+      const mensaje = 'Servicio pausado: no se enviaran recordatorios hasta reanudar.';
+      console.log(`${fechaEnvio()} | ${mensaje}`);
+      escribirEstado(true, mensaje);
+      escribirResultados();
+      return;
+    }
+
     const filas = seleccionarFilas();
 
     if (filas.length === 0) {
@@ -626,6 +666,7 @@ async function ejecutarCicloServicio() {
     console.log(resumen);
     escribirEstado(resultado.errores === 0, resumen);
     escribirResultados();
+    actualizarExcelDesdeResultados();
   } catch (error) {
     const resumen = `Servicio: error en ciclo: ${error.message}`;
     console.error(resumen);

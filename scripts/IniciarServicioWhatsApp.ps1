@@ -18,7 +18,7 @@ function Escribir-Log([string]$Mensaje) {
 
 if (Test-Path -LiteralPath $RutaLock) {
     $contenido = Get-Content -LiteralPath $RutaLock -ErrorAction SilentlyContinue
-    $pidAnterior = ($contenido | Select-String -Pattern '^pid=(\d+)' | ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1)
+    $pidAnterior = ($contenido | Select-String -Pattern 'pid=(\d+)' | ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1)
     if ($pidAnterior) {
         $procAnterior = Get-Process -Id ([int]$pidAnterior) -ErrorAction SilentlyContinue
         if ($null -ne $procAnterior) {

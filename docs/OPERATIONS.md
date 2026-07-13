@@ -14,10 +14,37 @@ scripts/
 | --- | --- |
 | Start persistent service | `.\scripts\IniciarServicioWhatsApp.cmd` |
 | Stop persistent service | `.\scripts\DetenerServicioWhatsApp.cmd` |
+| Start web admin interface | `.\scripts\IniciarWebAdmin.cmd` |
 | Manual send with confirmation | `.\scripts\EnviarProgramadosManual.cmd` |
 | One-shot automatic run | `.\scripts\EnviarProgramadosAuto.cmd` |
 | Enable minute testing mode | `.\scripts\CambiarHorasModoPruebaMinutos.ps1` |
 | Restore fixed-hour mode | `.\scripts\CambiarHorasModoHorasFijas.ps1` |
+
+## Excel view model
+
+The operational workbook uses one main sheet:
+
+```text
+Recordatorios Programados
+```
+
+Use column `R`:
+
+```text
+Filtrar casa
+```
+
+to visually select one or more houses. Excel will hide the unselected rows through its native AutoFilter.
+
+This is only a visual filter. The automation logic still sends based on:
+
+- weekday checkbox;
+- `Hora`;
+- `Activo = SI`;
+- `Próximo envío`;
+- anti-duplicate log.
+
+If a house is hidden by the Excel filter but still active and due, the service can still send it. To disable actual sending, change `Activo` to `NO`.
 
 ## Main runtime model
 
@@ -36,6 +63,55 @@ The service:
 3. Reads `workbooks/RecordatoriosWhatsApp_Programados.xlsx` every 60 seconds.
 4. Sends messages when a row is due.
 5. Writes logs and status under `runtime/`.
+
+## Web admin interface
+
+Start it with:
+
+```powershell
+.\scripts\IniciarWebAdmin.cmd
+```
+
+Then open:
+
+```text
+http://localhost:3000
+```
+
+The web interface has two views:
+
+| View | Purpose |
+| --- | --- |
+| `Recordatorios` | Friendly table/card view for filtering and editing reminder rows from the Excel workbook. |
+| `Estado del sistema` | Service state, latest status, logs, and buttons to start/stop/restart the WhatsApp service. |
+
+Data model:
+
+- There is no independent web database.
+- The workbook `workbooks/RecordatoriosWhatsApp_Programados.xlsx` is the source of truth.
+- The web API reads the workbook on demand.
+- Web edits are written back into the workbook through Excel COM and saved.
+- Excel edits must be saved before the web UI can read them.
+
+Editable from web:
+
+- category;
+- weekday checkboxes;
+- send time;
+- active flag;
+- manual-send flag;
+- message;
+- notes.
+
+Read-only from web:
+
+- house/group name;
+- row number;
+- status;
+- last send;
+- next send.
+
+The house/group name is intentionally read-only to reduce the risk of sending to a wrong WhatsApp group after an accidental rename.
 
 ## Important folders
 
@@ -59,6 +135,9 @@ The service:
 | `scripts/EnviarProgramadosAuto.ps1` | Legacy one-shot automatic workflow with retry/timeout controls. |
 | `scripts/CambiarHorasModoPruebaMinutos.ps1` | Enables minute-level dropdowns for testing exact times. |
 | `scripts/CambiarHorasModoHorasFijas.ps1` | Restores hourly dropdowns for production-like use. |
+| `scripts/web_server.js` | Local Express web server for the admin UI and service controls. |
+| `scripts/ActualizarRecordatorioDesdeWeb.ps1` | Writes web edits back into the Excel workbook. |
+| `scripts/IniciarWebAdmin.cmd` | Starts the local web admin server. |
 | `scripts/ModuloWhatsApp.bas` | VBA support module. |
 
 ## Logs and status
@@ -127,13 +206,15 @@ ACK 1 SERVIDOR
 
 ### 4. Was the reminder actually due?
 
-Open the relevant house sheet in Excel and verify:
+Open `Recordatorios Programados` in Excel and verify:
 
 - Today’s weekday checkbox is selected.
 - `Hora` is the intended time.
 - `Activo` is `SI`.
 - `Próximo envío` includes the current date/time.
 - The workbook was saved.
+
+If rows are hidden, check the filter in column `R` / `Filtrar casa`.
 
 ### 5. Service is stuck or WhatsApp Web is frozen
 

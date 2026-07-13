@@ -19,7 +19,7 @@ This project automates scheduled and manual WhatsApp group reminders from an Exc
 
 ```text
 Excel workbook
-  |-- one worksheet per house/group
+  |-- one main worksheet with a house filter
   |-- weekday checkboxes, active flag, send time, message, status
   |-- protected computed columns for last/next sends
         |
@@ -58,7 +58,8 @@ WhatsApp Web session
 
 ## Main features
 
-- Excel workbook organized with one worksheet per house/group.
+- Excel workbook organized in a single operational sheet with a native house filter.
+- Local web admin interface for reminder editing, filtering, service control, and log inspection.
 - Scheduled reminder calculation through protected Excel formulas.
 - Minute-level testing mode and fixed-hour production mode.
 - Manual send mode with operator confirmation.
@@ -123,6 +124,44 @@ The manual workflow:
 2. Shows a confirmation prompt.
 3. Runs the Node.js sender.
 4. Updates Excel status, last send, and notes.
+
+## Web admin interface
+
+The web interface uses the same operational workbook as Excel:
+
+```text
+workbooks/RecordatoriosWhatsApp_Programados.xlsx
+```
+
+There is no separate database. Excel remains the source of truth, and the web UI reads from and writes back to the same workbook.
+
+Start the web admin:
+
+```powershell
+.\scripts\IniciarWebAdmin.cmd
+```
+
+Or:
+
+```powershell
+npm run web
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+The web UI provides:
+
+- reminder filtering by house, category, active status, and text search;
+- editing for category, weekday selection, send time, active flag, manual-send flag, message, and notes;
+- read-only visibility for last send and next send;
+- system status, service state, and recent logs;
+- buttons to start, stop, and restart the persistent WhatsApp service.
+
+Operational note: changes made in Excel must be saved before the web UI can read them. Changes made in the web UI are written directly into the workbook and saved automatically.
 
 ## Automatic send
 

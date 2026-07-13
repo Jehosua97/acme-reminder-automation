@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ACME Reminder Control</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>ACME Reminder Control</h1>
+      <p>Excel y Web comparten la misma fuente de verdad.</p>
+    </div>
+    <div class="top-actions">
+      <button id="pauseToggle" class="pause-button" title="Pausar/Reanudar sistema">⏸</button>
+      <div class="status-pill" id="servicePill">Servicio: revisando...</div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-view="reminders">Recordatorios</button>
+    <button class="tab" data-view="system">Estado del sistema</button>
+  </nav>
+
+  <main>
+    <section id="remindersView" class="view active">
+      <div class="toolbar">
+        <div class="filter-block">
+          <div class="filter-title">Casas</div>
+          <div id="houseFilter" class="checkbox-filter"></div>
+        </div>
+
+        <label>
+          Categoría
+          <select id="categoryFilter">
+            <option value="">Todas</option>
+          </select>
+        </label>
+
+        <label>
+          Estado
+          <select id="statusFilter">
+            <option value="">Todos</option>
+            <option value="ENVIADO">ENVIADO</option>
+            <option value="PENDIENTE">PENDIENTE</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+        </label>
+
+        <label>
+          Activo
+          <select id="activeFilter">
+            <option value="">Todos</option>
+            <option value="SI">SI</option>
+            <option value="NO">NO</option>
+          </select>
+        </label>
+
+        <label class="search">
+          Buscar
+          <input id="searchBox" placeholder="Casa, categoría o mensaje" />
+        </label>
+
+        <button id="addBtn">Agregar</button>
+      </div>
+
+      <div class="hint">
+        Los cambios directos en la tabla se guardan automáticamente en Excel. Usa el lápiz para editar todo el recordatorio.
+      </div>
+
+      <div class="table-shell">
+        <table class="reminders-table">
+          <thead>
+            <tr>
+              <th>Fila</th>
+              <th>Casa</th>
+              <th>Categoría</th>
+              <th>Días</th>
+              <th>Hora</th>
+              <th>Activo</th>
+              <th>Manual</th>
+              <th>Estado</th>
+              <th>Próximo envío</th>
+              <th>Último envío</th>
+              <th>Mensaje</th>
+              <th>Notas</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="reminderGrid"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="systemView" class="view">
+      <div class="system-actions">
+        <button id="startService">Iniciar servicio</button>
+        <button id="stopService" class="danger">Detener servicio</button>
+        <button id="restartService">Reiniciar servicio</button>
+        <button id="refreshStatus">Actualizar estado</button>
+      </div>
+
+      <div class="cards">
+        <article class="card">
+          <h2>Servicio WhatsApp</h2>
+          <pre id="serviceStatus">Cargando...</pre>
+        </article>
+        <article class="card">
+          <h2>Último estado</h2>
+          <pre id="statusFile"></pre>
+        </article>
+      </div>
+
+      <div class="log-grid">
+        <article class="card">
+          <h2>servicio_programados.log</h2>
+          <pre id="serviceLog"></pre>
+        </article>
+        <article class="card">
+          <h2>resultados_programados.tsv</h2>
+          <pre id="resultsLog"></pre>
+        </article>
+        <article class="card">
+          <h2>envios_programados_log.tsv</h2>
+          <pre id="sentLog"></pre>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <dialog id="editModal" class="modal">
+    <form method="dialog" id="editModalForm">
+      <header class="modal-header">
+        <div>
+          <h2 id="modalTitle">Editar recordatorio</h2>
+          <p id="modalSubtitle"></p>
+        </div>
+        <button type="button" class="secondary" id="closeModal">Cerrar</button>
+      </header>
+
+      <div class="modal-grid">
+        <label>Casa / grupo exacto
+          <div class="category-combo" id="houseCombo">
+            <button type="button" id="houseComboButton" class="combo-button">
+              <span id="houseComboLabel">Seleccionar casa</span>
+              <span>▾</span>
+            </button>
+            <div id="houseComboMenu" class="combo-menu"></div>
+          </div>
+          <input id="modalGroup" type="hidden" />
+        </label>
+        <label>Categoría
+          <div class="category-combo" id="categoryCombo">
+            <button type="button" id="categoryComboButton" class="combo-button">
+              <span id="categoryComboLabel">Seleccionar categoría</span>
+              <span>▾</span>
+            </button>
+            <div id="categoryComboMenu" class="combo-menu"></div>
+          </div>
+          <input id="modalCategory" type="hidden" />
+        </label>
+        <label>Hora
+          <input id="modalHora" placeholder="10:20 hrs" />
+        </label>
+        <label>Activo
+          <select id="modalActivo">
+            <option>SI</option>
+            <option>NO</option>
+          </select>
+        </label>
+        <label>Enviar manual
+          <select id="modalManual">
+            <option>NO</option>
+            <option>SI</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="modal-days">
+        <label><input type="checkbox" id="modalLun" /> Lun</label>
+        <label><input type="checkbox" id="modalMar" /> Mar</label>
+        <label><input type="checkbox" id="modalMie" /> Mié</label>
+        <label><input type="checkbox" id="modalJue" /> Jue</label>
+        <label><input type="checkbox" id="modalVie" /> Vie</label>
+        <label><input type="checkbox" id="modalSab" /> Sáb</label>
+        <label><input type="checkbox" id="modalDom" /> Dom</label>
+      </div>
+
+      <label class="full">Mensaje
+        <textarea id="modalMessage"></textarea>
+      </label>
+
+      <label class="full">Notas
+        <textarea id="modalNotes" readonly></textarea>
+      </label>
+
+      <footer class="modal-actions">
+        <button type="button" class="secondary" id="discardModal">Cancelar</button>
+        <button type="submit">Guardar en Excel</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

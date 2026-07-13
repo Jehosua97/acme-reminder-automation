@@ -7,9 +7,11 @@
   "scripts": {
     "send": "node scripts/enviar_programados.js",
     "send:auto": "node scripts/enviar_programados.js workbooks/RecordatoriosWhatsApp_Programados.xlsx --auto --headless",
-    "service": "node scripts/enviar_programados.js workbooks/RecordatoriosWhatsApp_Programados.xlsx --service --headless"
+    "service": "node scripts/enviar_programados.js workbooks/RecordatoriosWhatsApp_Programados.xlsx --service --headless",
+    "web": "node scripts/web_server.js"
   },
   "dependencies": {
+    "express": "^5.2.1",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "^1.34.7",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"

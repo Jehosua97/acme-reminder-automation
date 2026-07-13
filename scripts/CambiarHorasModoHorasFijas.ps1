@@ -35,7 +35,7 @@ try {
         }
     }
 
-    $ws.Range('A2:Q2').Merge() | Out-Null
+    $ws.Range('A2:R2').Merge() | Out-Null
     $ws.Range('A2').Value2 = 'Marca los días activos con checkboxes y ajusta Hora/Activo. Último envío y Próximo envío están protegidas y se calculan automáticamente.'
     $ws.Range('A2').WrapText = $true
 
