@@ -48,15 +48,11 @@ WhatsApp Web session
 
 ```text
 .
-├── automation/                 # PowerShell/CMD orchestration
 ├── docs/                       # Supporting documentation
 ├── examples/                   # Sanitized demo workbook for portfolio review
 ├── runtime/                    # Local logs/status files, ignored by Git
-├── src/                        # Node.js automation code
-├── vba/                        # VBA support module
+├── scripts/                    # All Node.js, PowerShell, CMD, and VBA scripts
 ├── workbooks/                  # Local operational Excel files, ignored by Git
-├── EnviarProgramadosAuto.cmd   # Root compatibility launcher
-├── EnviarProgramadosManual.cmd # Root compatibility launcher
 └── package.json
 ```
 
@@ -118,7 +114,7 @@ The session folder is intentionally ignored by Git.
 Use:
 
 ```powershell
-.\EnviarProgramadosManual.cmd
+.\scripts\EnviarProgramadosManual.cmd
 ```
 
 The manual workflow:
@@ -130,24 +126,46 @@ The manual workflow:
 
 ## Automatic send
 
-Install the scheduled task:
+The preferred runtime model is the persistent service. It starts WhatsApp Web once and keeps checking for due reminders.
+
+Start the service:
 
 ```powershell
-.\InstalarTareaAutomatica.cmd
+.\scripts\IniciarServicioWhatsApp.cmd
+```
+
+Stop the service:
+
+```powershell
+.\scripts\DetenerServicioWhatsApp.cmd
+```
+
+Install startup launchers:
+
+```powershell
+.\scripts\InstalarServicioWhatsApp.cmd
+```
+
+If Task Scheduler permissions are unavailable, place `RecordatoriosWhatsAppServicio.cmd` in the Windows Startup folder for the current user.
+
+Legacy one-shot scheduled task installer:
+
+```powershell
+.\scripts\InstalarTareaAutomatica.cmd
 ```
 
 Remove it:
 
 ```powershell
-.\DesinstalarTareaAutomatica.cmd
+.\scripts\DesinstalarTareaAutomatica.cmd
 ```
 
 The automatic workflow runs through:
 
 ```text
-EnviarProgramadosAuto.cmd
-automation/EnviarProgramadosAuto.ps1
-src/enviar_programados.js
+scripts/IniciarServicioWhatsApp.cmd
+scripts/IniciarServicioWhatsApp.ps1
+scripts/enviar_programados.js --service --headless
 ```
 
 ## Testing mode
@@ -155,7 +173,7 @@ src/enviar_programados.js
 Enable minute-level scheduling:
 
 ```powershell
-.\automation\CambiarHorasModoPruebaMinutos.ps1
+.\scripts\CambiarHorasModoPruebaMinutos.ps1
 ```
 
 Testing mode is useful for validating sends at exact times such as `10:12 hrs` or `10:20 hrs`.
@@ -165,7 +183,13 @@ Testing mode is useful for validating sends at exact times such as `10:12 hrs` o
 Restore fixed hourly selection:
 
 ```powershell
-.\automation\CambiarHorasModoHorasFijas.ps1
+.\scripts\CambiarHorasModoHorasFijas.ps1
+```
+
+For operations and debugging, see:
+
+```text
+docs/OPERATIONS.md
 ```
 
 For production, configure Task Scheduler frequency and the Node.js tolerance window consistently. The script supports:

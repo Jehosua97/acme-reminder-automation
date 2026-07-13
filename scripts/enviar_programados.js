@@ -25,7 +25,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const ARGUMENTOS = process.argv.slice(2);
 const MODO_AUTO = ARGUMENTOS.includes('--auto');
-const MODO_HEADLESS = MODO_AUTO || ARGUMENTOS.includes('--headless');
+const MODO_SERVICIO = ARGUMENTOS.includes('--service');
+const MODO_HEADLESS = MODO_AUTO || MODO_SERVICIO || ARGUMENTOS.includes('--headless');
 const RUTA_EXCEL_ARG = ARGUMENTOS.find((arg) => !arg.startsWith('--'));
 
 const RUTA_EXCEL_PREDETERMINADA = path.join(
@@ -48,6 +49,8 @@ const ACK_MINIMO_CONFIRMADO = 1;
 const TIEMPO_MAXIMO_CONFIRMACION_MS = 90000;
 const PUPPETEER_PROTOCOL_TIMEOUT_MS = 300000;
 const PUPPETEER_DEFAULT_TIMEOUT_MS = 180000;
+const TIEMPO_MAXIMO_INICIALIZACION_MS = 120000;
+const INTERVALO_SERVICIO_MS = Number(process.env.INTERVALO_SERVICIO_MS || 60000);
 // Ventana de tolerancia para envios automaticos.
 // En testing se usa 3 minutos con una tarea frecuente.
 // En produccion puede sobrescribirse con la variable VENTANA_AUTO_MINUTOS.
@@ -72,6 +75,8 @@ let client;
 let finalizando = false;
 let resultados = [];
 let filasPreseleccionadas = null;
+let temporizadorInicializacion = null;
+let cicloServicioEnCurso = false;
 
 function texto(valor) {
   return valor === undefined || valor === null ? '' : String(valor);
@@ -445,7 +450,7 @@ function leerFilasExcel() {
 function seleccionarFilas() {
   const filas = leerFilasExcel();
 
-  if (!MODO_AUTO) {
+  if (!MODO_AUTO && !MODO_SERVICIO) {
     return filas.filter((fila) => esSi(fila.enviarManual));
   }
 
@@ -476,7 +481,13 @@ async function procesarEnvios() {
     return;
   }
 
-  console.log(`Modo: ${MODO_AUTO ? 'AUTOMÃTICO' : 'MANUAL'}`);
+  const resultado = await procesarFilas(filas);
+  const resumen = `Proceso terminado: ${resultado.enviados} enviado(s), ${resultado.errores} error(es).`;
+  await finalizar(resultado.errores === 0, resumen, resultado.errores === 0 ? 0 : 2);
+}
+
+async function procesarFilas(filas) {
+  console.log(`Modo: ${MODO_SERVICIO ? 'SERVICIO' : MODO_AUTO ? 'AUTOMÃTICO' : 'MANUAL'}`);
   console.log(`Archivo: ${RUTA_EXCEL}`);
   console.log(`Filas a enviar: ${filas.length}`);
   console.log('Cargando chats de WhatsApp...');
@@ -485,8 +496,7 @@ async function procesarEnvios() {
   try {
     chats = await client.getChats();
   } catch (error) {
-    await finalizar(false, `No se pudieron obtener los chats: ${error.message}`);
-    return;
+    throw new Error(`No se pudieron obtener los chats: ${error.message}`);
   }
 
   let enviados = 0;
@@ -588,11 +598,51 @@ async function procesarEnvios() {
     }
   }
 
-  const resumen = `Proceso terminado: ${enviados} enviado(s), ${errores} error(es).`;
-  await finalizar(errores === 0, resumen, errores === 0 ? 0 : 2);
+  return { enviados, errores };
 }
 
-try {
+async function ejecutarCicloServicio() {
+  if (cicloServicioEnCurso) {
+    console.log('Servicio: ciclo anterior sigue en curso; se omite esta revision.');
+    return;
+  }
+
+  cicloServicioEnCurso = true;
+  resultados = [];
+
+  try {
+    const filas = seleccionarFilas();
+
+    if (filas.length === 0) {
+      const mensaje = 'Servicio activo: no hay recordatorios pendientes en esta revision.';
+      console.log(`${fechaEnvio()} | ${mensaje}`);
+      escribirEstado(true, mensaje);
+      escribirResultados();
+      return;
+    }
+
+    const resultado = await procesarFilas(filas);
+    const resumen = `Servicio: ${resultado.enviados} enviado(s), ${resultado.errores} error(es).`;
+    console.log(resumen);
+    escribirEstado(resultado.errores === 0, resumen);
+    escribirResultados();
+  } catch (error) {
+    const resumen = `Servicio: error en ciclo: ${error.message}`;
+    console.error(resumen);
+    escribirEstado(false, resumen);
+    escribirResultados();
+  } finally {
+    cicloServicioEnCurso = false;
+  }
+}
+
+function iniciarServicio() {
+  console.log(`Servicio iniciado. Revision cada ${Math.round(INTERVALO_SERVICIO_MS / 1000)} segundos.`);
+  ejecutarCicloServicio();
+  setInterval(ejecutarCicloServicio, INTERVALO_SERVICIO_MS);
+}
+
+if (!MODO_SERVICIO) try {
   filasPreseleccionadas = seleccionarFilas();
   if (filasPreseleccionadas.length === 0) {
     const mensaje = MODO_AUTO
@@ -636,6 +686,7 @@ client = new Client({
 });
 
 client.on('qr', (qr) => {
+  if (temporizadorInicializacion) clearTimeout(temporizadorInicializacion);
   console.log('\nEscanea este QR desde WhatsApp > Dispositivos vinculados:');
   qrcode.generate(qr, { small: true });
 });
@@ -645,6 +696,7 @@ client.on('authenticated', () => {
 });
 
 client.on('ready', () => {
+  if (temporizadorInicializacion) clearTimeout(temporizadorInicializacion);
   console.log('WhatsApp estÃ¡ listo.');
   try {
     if (client.pupPage) {
@@ -654,9 +706,13 @@ client.on('ready', () => {
   } catch (error) {
     console.log(`Aviso: no se pudieron ajustar timeouts de Puppeteer: ${error.message}`);
   }
-  procesarEnvios().catch((error) =>
-    finalizar(false, `Error inesperado: ${error.message}`)
-  );
+  if (MODO_SERVICIO) {
+    iniciarServicio();
+  } else {
+    procesarEnvios().catch((error) =>
+      finalizar(false, `Error inesperado: ${error.message}`)
+    );
+  }
 });
 
 client.on('auth_failure', (mensaje) => {
@@ -675,6 +731,13 @@ process.on('unhandledRejection', (error) => {
   const mensaje = error && error.message ? error.message : String(error);
   finalizar(false, `Promesa rechazada: ${mensaje}`);
 });
+
+temporizadorInicializacion = setTimeout(() => {
+  finalizar(
+    false,
+    `WhatsApp Web no estuvo listo en ${TIEMPO_MAXIMO_INICIALIZACION_MS / 1000}s.`
+  );
+}, TIEMPO_MAXIMO_INICIALIZACION_MS);
 
 client.initialize();
 

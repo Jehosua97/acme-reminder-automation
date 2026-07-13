@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "description": "Envío de recordatorios a grupos de WhatsApp controlado desde Excel.",
-  "main": "src/enviar_programados.js",
+  "main": "scripts/enviar_programados.js",
   "scripts": {
-    "send": "node src/enviar_programados.js",
-    "send:auto": "node src/enviar_programados.js workbooks/RecordatoriosWhatsApp_Programados.xlsx --auto --headless"
+    "send": "node scripts/enviar_programados.js",
+    "send:auto": "node scripts/enviar_programados.js workbooks/RecordatoriosWhatsApp_Programados.xlsx --auto --headless",
+    "service": "node scripts/enviar_programados.js workbooks/RecordatoriosWhatsApp_Programados.xlsx --service --headless"
   },
   "dependencies": {
     "qrcode-terminal": "^0.12.0",
