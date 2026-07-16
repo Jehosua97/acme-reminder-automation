@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ACME Reminder Control</title>
+  <title>Confort Place Reminder Control</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header class="topbar">
     <div>
-      <h1>ACME Reminder Control</h1>
-      <p>Excel y Web comparten la misma fuente de verdad.</p>
+      <h1>Confort Place Reminder Control</h1>
+      <p>Panel de administración de recordatorios para grupos de WhatsApp.</p>
     </div>
     <div class="top-actions">
       <button id="pauseToggle" class="pause-button" title="Pausar/Reanudar sistema">⏸</button>
@@ -39,7 +39,7 @@
         </label>
 
         <label>
-          Estado
+          Resultado
           <select id="statusFilter">
             <option value="">Todos</option>
             <option value="ENVIADO">ENVIADO</option>
@@ -49,11 +49,11 @@
         </label>
 
         <label>
-          Activo
+          Estado
           <select id="activeFilter">
             <option value="">Todos</option>
-            <option value="SI">SI</option>
-            <option value="NO">NO</option>
+            <option value="SI">Activo</option>
+            <option value="NO">Desactivado</option>
           </select>
         </label>
 
@@ -63,24 +63,26 @@
         </label>
 
         <button id="addBtn">Agregar</button>
+        <button id="bulkDeleteBtn" class="danger hidden" type="button">Eliminar seleccionados</button>
       </div>
 
       <div class="hint">
-        Los cambios directos en la tabla se guardan automáticamente en Excel. Usa el lápiz para editar todo el recordatorio.
+        Los cambios directos en la tabla se guardan automáticamente. Usa el lápiz para editar todo el recordatorio.
       </div>
 
       <div class="table-shell">
         <table class="reminders-table">
           <thead>
             <tr>
-              <th>Fila</th>
-              <th>Casa</th>
+              <th class="select-cell">
+                <input id="selectVisibleRows" type="checkbox" title="Seleccionar visibles" />
+              </th>
+              <th><button type="button" class="sort-header" data-sort="group">Casa <span data-sort-arrow="group">↕</span></button></th>
               <th>Categoría</th>
               <th>Días</th>
               <th>Hora</th>
-              <th>Activo</th>
-              <th>Manual</th>
               <th>Estado</th>
+              <th>Resultado</th>
               <th>Próximo envío</th>
               <th>Último envío</th>
               <th>Mensaje</th>
@@ -98,6 +100,8 @@
         <button id="startService">Iniciar servicio</button>
         <button id="stopService" class="danger">Detener servicio</button>
         <button id="restartService">Reiniciar servicio</button>
+        <button id="debugMode" type="button">Modo Debug</button>
+        <button id="productionMode" type="button">Modo ProducciÃ³n</button>
         <button id="refreshStatus">Actualizar estado</button>
       </div>
 
@@ -163,23 +167,25 @@
           <input id="modalCategory" type="hidden" />
         </label>
         <label>Hora
-          <input id="modalHora" placeholder="10:20 hrs" />
+          <select id="modalHora"></select>
         </label>
-        <label>Activo
-          <select id="modalActivo">
-            <option>SI</option>
-            <option>NO</option>
+        <label>Tipo de programación
+          <select id="modalScheduleType">
+            <option value="weekly">Semanal</option>
+            <option value="monthly">Mensual</option>
+            <option value="interval">Intervalo</option>
           </select>
         </label>
-        <label>Enviar manual
-          <select id="modalManual">
-            <option>NO</option>
-            <option>SI</option>
-          </select>
+        <label>Estado
+          <span class="state-toggle modal-state-toggle is-disabled" id="modalActivoToggle" title="Desactivado">
+            <input type="checkbox" id="modalActivo" />
+            <span class="toggle-track"><span class="toggle-knob"></span></span>
+            <span class="toggle-label" id="modalActivoLabel">Desactivado</span>
+          </span>
         </label>
       </div>
 
-      <div class="modal-days">
+      <div id="weeklyScheduleFields" class="modal-days">
         <label><input type="checkbox" id="modalLun" /> Lun</label>
         <label><input type="checkbox" id="modalMar" /> Mar</label>
         <label><input type="checkbox" id="modalMie" /> Mié</label>
@@ -187,6 +193,50 @@
         <label><input type="checkbox" id="modalVie" /> Vie</label>
         <label><input type="checkbox" id="modalSab" /> Sáb</label>
         <label><input type="checkbox" id="modalDom" /> Dom</label>
+      </div>
+
+      <div id="monthlyScheduleFields" class="monthly-schedule hidden">
+        <div class="monthly-block">
+          <div class="monthly-title">Semana del mes</div>
+          <label><input type="checkbox" class="monthly-ordinal" value="1" /> 1</label>
+          <label><input type="checkbox" class="monthly-ordinal" value="2" /> 2</label>
+          <label><input type="checkbox" class="monthly-ordinal" value="3" /> 3</label>
+          <label><input type="checkbox" class="monthly-ordinal" value="4" /> 4</label>
+          <label><input type="checkbox" class="monthly-ordinal" value="5" /> 5</label>
+        </div>
+        <label>Día del mes
+          <select id="modalMonthlyWeekday">
+            <option value="">Seleccionar día</option>
+            <option value="lun">Lunes</option>
+            <option value="mar">Martes</option>
+            <option value="mie">Miércoles</option>
+            <option value="jue">Jueves</option>
+            <option value="vie">Viernes</option>
+            <option value="sab">Sábado</option>
+            <option value="dom">Domingo</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="intervalScheduleFields" class="interval-schedule hidden">
+        <label>Fecha base
+          <input id="modalIntervalStartDate" type="date" />
+        </label>
+        <label>Repetir cada
+          <select id="modalIntervalWeeks">
+            <option value="1">1 semana</option>
+            <option value="2">2 semanas</option>
+            <option value="3">3 semanas</option>
+            <option value="4">4 semanas</option>
+            <option value="5">5 semanas</option>
+            <option value="6">6 semanas</option>
+            <option value="8">8 semanas</option>
+            <option value="12">12 semanas</option>
+          </select>
+        </label>
+        <p class="interval-help">
+          Usa este modo para reglas como basura azul/gris: eliges la primera fecha real y el sistema calcula cada cuantas semanas se repite.
+        </p>
       </div>
 
       <label class="full">Mensaje
@@ -199,7 +249,7 @@
 
       <footer class="modal-actions">
         <button type="button" class="secondary" id="discardModal">Cancelar</button>
-        <button type="submit">Guardar en Excel</button>
+        <button type="submit">Guardar</button>
       </footer>
     </form>
   </dialog>

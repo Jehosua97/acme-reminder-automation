@@ -1,0 +1,2466 @@
+{
+  "version": 1,
+  "lastWeeklyStatusReset": "2026-07-13T02:00:00.000Z",
+  "nextId": 104,
+  "reminders": [
+    {
+      "id": 6,
+      "group": "Departamento 510",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos d?as chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no est?n utilizando.\r\n* Colocar las sillas del comedor en su lugar despu?s de usarlas.\r\n\r\nMuchas gracias por su colaboraci?n para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "Departamento 510"
+    },
+    {
+      "id": 7,
+      "group": "Departamento 510",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": true,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "",
+      "filtrarCasa": "Departamento 510"
+    },
+    {
+      "id": 8,
+      "group": "Departamento 510",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "No se encontrÃ³ el grupo exacto \"Departamento 510\".",
+      "filtrarCasa": "Departamento 510"
+    },
+    {
+      "id": 9,
+      "group": "Departamento 510",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "Departamento 510"
+    },
+    {
+      "id": 10,
+      "group": "Departamento 510",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "Departamento 510"
+    },
+    {
+      "id": 12,
+      "group": "Basement 78 Sutherland",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos días chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no estén utilizando.\r\n* Colocar las sillas del comedor en su lugar después de usarlas.\r\n\r\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "Basement 78 Sutherland"
+    },
+    {
+      "id": 13,
+      "group": "Basement 78 Sutherland",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": true
+      },
+      "hora": "19:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "No se encontrÃ³ el grupo exacto \"Basement 78 Sutherland\".",
+      "filtrarCasa": "Basement 78 Sutherland"
+    },
+    {
+      "id": 14,
+      "group": "Basement 78 Sutherland",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "No se encontrÃ³ el grupo exacto \"Basement 78 Sutherland\".",
+      "filtrarCasa": "Basement 78 Sutherland"
+    },
+    {
+      "id": 15,
+      "group": "Basement 78 Sutherland",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "Basement 78 Sutherland"
+    },
+    {
+      "id": 16,
+      "group": "Basement 78 Sutherland",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "Basement 78 Sutherland"
+    },
+    {
+      "id": 18,
+      "group": "11 Huntingwood",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": true,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "12:00",
+      "activo": "SI",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes a todos.\n\nSolo quiero confirmar si ya se cambiaron las bolsas de basura dentro de la unidad. Recuerden que esta tarea le corresponde a la persona asignada a la limpieza del fin de semana.\n\nPor favor, confirmen una vez que esté realizado. Recuerden cambiar las tres bolsas:\n\n♻️ Bolsa de reciclaje\n🗑️ Bolsa negra (basura)\n🌱 Bolsa de composta (orgánicos)\n\nQuedo atenta a su confirmación. ¡Muchas gracias!",
+      "notas": "",
+      "filtrarCasa": "11 Huntingwood"
+    },
+    {
+      "id": 19,
+      "group": "11 Huntingwood",
+      "category": "Otros",
+      "scheduleType": "monthly",
+      "monthly": {
+        "ordinals": [
+          1
+        ],
+        "weekday": "mar"
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 2
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "SI",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "*Buenas tardes a todos.*\n\nSolo quiero recordarles la importancia de utilizar correctamente el baño para evitar que se tape.\n\n*Por favor, tiren únicamente papel higiénico dentro de la taza del baño.* No arrojen toallas sanitarias, toallitas húmedas, cartón ni ningún otro objeto, ya que pueden obstruir las tuberías y causar problemas para todos.\n\nTodo esto es para el beneficio y comodidad de todos los residentes.\n\nQuedo atenta. ¡Muchas gracias por su cooperación!",
+      "notas": "No se encontrÃ³ el grupo exacto \"11 Huntingwood\".",
+      "filtrarCasa": "11 Huntingwood"
+    },
+    {
+      "id": 20,
+      "group": "11 Huntingwood",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": true,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "SI",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos.\n\nSolo como recordatorio, ya pueden comenzar a utilizar la lavadora.\n\nHorario permitido para lavar ropa:\n\nLunes a viernes: de 7:00 p.m. a 10:30 p.m.\nSábados, domingos y días festivos: de 10:00 a.m. a 10:30 p.m.\n\nLes pedimos respetar estos horarios para evitar molestias a los demás residentes. El incumplimiento de este horario resultará en una multa de $50 CAD.\n\n¡Gracias por su comprensión y cooperación!",
+      "notas": "No se encontrÃ³ el grupo exacto \"11 Huntingwood\".",
+      "filtrarCasa": "11 Huntingwood"
+    },
+    {
+      "id": 21,
+      "group": "11 Huntingwood",
+      "category": "Estufa y luces",
+      "scheduleType": "monthly",
+      "monthly": {
+        "ordinals": [
+          1,
+          3
+        ],
+        "weekday": "sab"
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "SI",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "11 Huntingwood"
+    },
+    {
+      "id": 22,
+      "group": "11 Huntingwood",
+      "category": "Ruido fin de semana",
+      "scheduleType": "monthly",
+      "monthly": {
+        "ordinals": [
+          2,
+          4
+        ],
+        "weekday": "sab"
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "SI",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\n\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\n\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\n\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "11 Huntingwood"
+    },
+    {
+      "id": 24,
+      "group": "14 Hayden Crt Brampton",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos días chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no estén utilizando.\r\n* Colocar las sillas del comedor en su lugar después de usarlas.\r\n\r\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "14 Hayden Crt Brampton"
+    },
+    {
+      "id": 25,
+      "group": "14 Hayden Crt Brampton",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "No se encontrÃ³ el grupo exacto \"14 Hayden Crt Brampton\".",
+      "filtrarCasa": "14 Hayden Crt Brampton"
+    },
+    {
+      "id": 26,
+      "group": "14 Hayden Crt Brampton",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "No se encontrÃ³ el grupo exacto \"14 Hayden Crt Brampton\".",
+      "filtrarCasa": "14 Hayden Crt Brampton"
+    },
+    {
+      "id": 27,
+      "group": "14 Hayden Crt Brampton",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "14 Hayden Crt Brampton"
+    },
+    {
+      "id": 28,
+      "group": "14 Hayden Crt Brampton",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "14 Hayden Crt Brampton"
+    },
+    {
+      "id": 30,
+      "group": "9 Sutherland Ave Brampton ON L6V 2H3 Canada",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos días chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no estén utilizando.\r\n* Colocar las sillas del comedor en su lugar después de usarlas.\r\n\r\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "9 Sutherland Ave Brampton ON L6V 2H3 Canada"
+    },
+    {
+      "id": 31,
+      "group": "9 Sutherland Ave Brampton ON L6V 2H3 Canada",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "No se encontrÃ³ el grupo exacto \"9 Sutherland Ave Brampton ON L6V 2H3 Canada\".",
+      "filtrarCasa": "9 Sutherland Ave Brampton ON L6V 2H3 Canada"
+    },
+    {
+      "id": 32,
+      "group": "9 Sutherland Ave Brampton ON L6V 2H3 Canada",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "No se encontrÃ³ el grupo exacto \"9 Sutherland Ave Brampton ON L6V 2H3 Canada\".",
+      "filtrarCasa": "9 Sutherland Ave Brampton ON L6V 2H3 Canada"
+    },
+    {
+      "id": 33,
+      "group": "9 Sutherland Ave Brampton ON L6V 2H3 Canada",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "9 Sutherland Ave Brampton ON L6V 2H3 Canada"
+    },
+    {
+      "id": 34,
+      "group": "9 Sutherland Ave Brampton ON L6V 2H3 Canada",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "9 Sutherland Ave Brampton ON L6V 2H3 Canada"
+    },
+    {
+      "id": 36,
+      "group": "116 Madoc",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos días chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no estén utilizando.\r\n* Colocar las sillas del comedor en su lugar después de usarlas.\r\n\r\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "116 Madoc"
+    },
+    {
+      "id": 37,
+      "group": "116 Madoc",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "No se encontrÃ³ el grupo exacto \"116 Madoc\".",
+      "filtrarCasa": "116 Madoc"
+    },
+    {
+      "id": 38,
+      "group": "116 Madoc",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "No se encontrÃ³ el grupo exacto \"116 Madoc\".",
+      "filtrarCasa": "116 Madoc"
+    },
+    {
+      "id": 39,
+      "group": "116 Madoc",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "116 Madoc"
+    },
+    {
+      "id": 40,
+      "group": "116 Madoc",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "116 Madoc"
+    },
+    {
+      "id": 42,
+      "group": "HOME 185  VODDEN ST E",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos días chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no estén utilizando.\r\n* Colocar las sillas del comedor en su lugar después de usarlas.\r\n\r\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "HOME 185  VODDEN ST E"
+    },
+    {
+      "id": 43,
+      "group": "HOME 185  VODDEN ST E",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "No se encontrÃ³ el grupo exacto \"HOME 185  VODDEN ST E\".",
+      "filtrarCasa": "HOME 185  VODDEN ST E"
+    },
+    {
+      "id": 44,
+      "group": "HOME 185  VODDEN ST E",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "No se encontrÃ³ el grupo exacto \"HOME 185  VODDEN ST E\".",
+      "filtrarCasa": "HOME 185  VODDEN ST E"
+    },
+    {
+      "id": 45,
+      "group": "HOME 185  VODDEN ST E",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "HOME 185  VODDEN ST E"
+    },
+    {
+      "id": 46,
+      "group": "HOME 185  VODDEN ST E",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "HOME 185  VODDEN ST E"
+    },
+    {
+      "id": 48,
+      "group": "96 Sutherland",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos días chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no estén utilizando.\r\n* Colocar las sillas del comedor en su lugar después de usarlas.\r\n\r\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "96 Sutherland"
+    },
+    {
+      "id": 49,
+      "group": "96 Sutherland",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "No se encontrÃ³ el grupo exacto \" 96 Sutherland\".",
+      "filtrarCasa": "96 Sutherland"
+    },
+    {
+      "id": 50,
+      "group": "96 Sutherland",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "No se encontrÃ³ el grupo exacto \" 96 Sutherland\".",
+      "filtrarCasa": "96 Sutherland"
+    },
+    {
+      "id": 51,
+      "group": "96 Sutherland",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "96 Sutherland"
+    },
+    {
+      "id": 52,
+      "group": "96 Sutherland",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "96 Sutherland"
+    },
+    {
+      "id": 54,
+      "group": "Departamento 303",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos días chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no estén utilizando.\r\n* Colocar las sillas del comedor en su lugar después de usarlas.\r\n\r\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "Departamento 303"
+    },
+    {
+      "id": 55,
+      "group": "Departamento 303",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "No se encontrÃ³ el grupo exacto \"Departamento 303\".",
+      "filtrarCasa": "Departamento 303"
+    },
+    {
+      "id": 56,
+      "group": "Departamento 303",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "No se encontrÃ³ el grupo exacto \"Departamento 303\".",
+      "filtrarCasa": "Departamento 303"
+    },
+    {
+      "id": 57,
+      "group": "Departamento 303",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "Departamento 303"
+    },
+    {
+      "id": 58,
+      "group": "Departamento 303",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "Departamento 303"
+    },
+    {
+      "id": 60,
+      "group": "45 Hansen Rd N #99",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "12:30",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos días chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no estén utilizando.\r\n* Colocar las sillas del comedor en su lugar después de usarlas.\r\n\r\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "45 Hansen Rd N #99"
+    },
+    {
+      "id": 61,
+      "group": "45 Hansen Rd N #99",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "No se encontrÃ³ el grupo exacto \"45 Hansen Rd N #99\".",
+      "filtrarCasa": "45 Hansen Rd N #99"
+    },
+    {
+      "id": 62,
+      "group": "45 Hansen Rd N #99",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "No se encontrÃ³ el grupo exacto \"45 Hansen Rd N #99\".",
+      "filtrarCasa": "45 Hansen Rd N #99"
+    },
+    {
+      "id": 63,
+      "group": "45 Hansen Rd N #99",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "45 Hansen Rd N #99"
+    },
+    {
+      "id": 64,
+      "group": "45 Hansen Rd N #99",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "45 Hansen Rd N #99"
+    },
+    {
+      "id": 66,
+      "group": "17 Hilldowntree",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos días chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no estén utilizando.\r\n* Colocar las sillas del comedor en su lugar después de usarlas.\r\n\r\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "17 Hilldowntree"
+    },
+    {
+      "id": 67,
+      "group": "17 Hilldowntree",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "No se encontrÃ³ el grupo exacto \"17 Hilldowntree\".",
+      "filtrarCasa": "17 Hilldowntree"
+    },
+    {
+      "id": 68,
+      "group": "17 Hilldowntree",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "No se encontrÃ³ el grupo exacto \"17 Hilldowntree\".",
+      "filtrarCasa": "17 Hilldowntree"
+    },
+    {
+      "id": 69,
+      "group": "17 Hilldowntree",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "17 Hilldowntree"
+    },
+    {
+      "id": 70,
+      "group": "17 Hilldowntree",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "17 Hilldowntree"
+    },
+    {
+      "id": 72,
+      "group": "26 Lincoln Brampton",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos días chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no estén utilizando.\r\n* Colocar las sillas del comedor en su lugar después de usarlas.\r\n\r\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "26 Lincoln Brampton"
+    },
+    {
+      "id": 73,
+      "group": "26 Lincoln Brampton",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "No se encontrÃ³ el grupo exacto \" 26 Lincoln Brampton\".",
+      "filtrarCasa": "26 Lincoln Brampton"
+    },
+    {
+      "id": 74,
+      "group": "26 Lincoln Brampton",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "No se encontrÃ³ el grupo exacto \" 26 Lincoln Brampton\".",
+      "filtrarCasa": "26 Lincoln Brampton"
+    },
+    {
+      "id": 75,
+      "group": "26 Lincoln Brampton",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "26 Lincoln Brampton"
+    },
+    {
+      "id": 76,
+      "group": "26 Lincoln Brampton",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "26 Lincoln Brampton"
+    },
+    {
+      "id": 78,
+      "group": "152 Royal Palm",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos días chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no estén utilizando.\r\n* Colocar las sillas del comedor en su lugar después de usarlas.\r\n\r\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "152 Royal Palm"
+    },
+    {
+      "id": 79,
+      "group": "152 Royal Palm",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "No se encontrÃ³ el grupo exacto \"152 Royal Palm\".",
+      "filtrarCasa": "152 Royal Palm"
+    },
+    {
+      "id": 80,
+      "group": "152 Royal Palm",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ERROR",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "No se encontrÃ³ el grupo exacto \"152 Royal Palm\".",
+      "filtrarCasa": "152 Royal Palm"
+    },
+    {
+      "id": 81,
+      "group": "152 Royal Palm",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "",
+      "filtrarCasa": "152 Royal Palm"
+    },
+    {
+      "id": 82,
+      "group": "152 Royal Palm",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": false
+      },
+      "hora": "21:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "",
+      "filtrarCasa": "152 Royal Palm"
+    },
+    {
+      "id": 84,
+      "group": "Casa 100",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": true,
+        "mie": true,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "12:00",
+      "activo": "NO",
+      "enviarManual": "SI",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "viernes 10/Jul/2026 11:50 hrs",
+      "mensaje": "Buenos días chicos,\r\n\r\nComo recordatorio, les pido de su amable apoyo para:\r\n\r\n* Lavar, secar y guardar los trastes que utilicen.\r\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\r\n* Apagar todas las luces que no estén utilizando.\r\n* Colocar las sillas del comedor en su lugar después de usarlas.\r\n\r\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "viernes 10/Jul/2026 11:50 hrs | Limpieza y orden | Buenos días chicos,  Como recordatorio, les pido de su amable apoyo para:  * Lavar, secar y guardar los trastes que utilicen. * Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones. * Apagar todas las luces que no estén utilizando. * Colocar las sillas del comedor en su lugar después de usarlas.  Muchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "filtrarCasa": "Casa 100"
+    },
+    {
+      "id": 85,
+      "group": "Casa 100",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "08:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas tardes, chicos.\r\n\r\nSolo para confirmarles que el horario de lavado ya está disponible. Pueden utilizar la lavandería de 7:00 p. m. a 10:30 p. m.\r\n\r\nGracias.",
+      "notas": "",
+      "filtrarCasa": "Casa 100"
+    },
+    {
+      "id": 86,
+      "group": "Casa 100",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": true,
+        "sab": true,
+        "dom": true
+      },
+      "hora": "09:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Como recordatorio, les pido que después de utilizar la secadora limpien el filtro. Es importante cuidarla para mantenerla en buen funcionamiento y evitar daños.\r\n\r\nGracias por su apoyo.",
+      "notas": "",
+      "filtrarCasa": "Casa 100"
+    },
+    {
+      "id": 87,
+      "group": "Casa 100",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": true,
+        "mie": false,
+        "jue": true,
+        "vie": true,
+        "sab": true,
+        "dom": true
+      },
+      "hora": "20:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "ENVIADO",
+      "ultimoEnvio": "lunes 13/Jul/2026 20:00 hrs",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "notas": "lunes 13/Jul/2026 20:00 hrs | Estufa y luces | Buenas noches a todos, chicos.\r\n\r\nComo recordatorio, les pido que antes de dormir verifiquen que la estufa esté completamente apagada para evitar accidentes. Asimismo, favor de apagar todas las luces que no se estén utilizando.\r\n\r\nGracias por su apoyo y que tengan una excelente noche.",
+      "filtrarCasa": "Casa 100"
+    },
+    {
+      "id": 88,
+      "group": "Casa 100",
+      "category": "Ruido fin de semana",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": true,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": true,
+        "dom": true
+      },
+      "hora": "01:30",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "lunes 13/Jul/2026 11:15 hrs",
+      "mensaje": "Buenas noches a todos, chicos.\r\n\r\nSolo como recordatorio, al ser fin de semana les pedimos de la manera más amable que moderen el ruido. Sabemos que muchos aprovechan estos días, pero también hay personas que necesitan descansar después de una semana de trabajo.\r\n\r\nSeamos considerados con los demás y ayudemos a mantener un ambiente tranquilo para todos.\r\n\r\nMuchas gracias por su apoyo. ¡Que tengan una excelente noche!",
+      "notas": "lunes 13/Jul/2026 11:15 hrs | Ruido fin de semana | Envio registrado desde log del servicio.",
+      "filtrarCasa": "Casa 100"
+    },
+    {
+      "id": 89,
+      "group": "Casa 100",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "13:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "lunes 13/Jul/2026 12:50 hrs",
+      "mensaje": "Prueba desde Web",
+      "notas": "lunes 13/Jul/2026 12:50 hrs | Estufa y luces | Prueba desde Web",
+      "filtrarCasa": "Casa 100"
+    },
+    {
+      "id": 90,
+      "group": "Casa 100",
+      "category": "Lavandería - filtro secadora",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "13:00",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "lunes 13/Jul/2026 13:05 hrs",
+      "mensaje": "Prueba para ver si 13:05 funciona sin hrs",
+      "notas": "lunes 13/Jul/2026 13:05 hrs | Lavandería - filtro secadora | Prueba para ver si 13:05 funciona sin hrs",
+      "filtrarCasa": "Casa 100"
+    },
+    {
+      "id": 94,
+      "group": "7072 Magic Crt Mississauga ON",
+      "category": "Lavandería - horario",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "13:30",
+      "activo": "NO",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Hola me equivoque\n",
+      "notas": "",
+      "filtrarCasa": "7072 Magic Crt Mississauga ON"
+    },
+    {
+      "id": 95,
+      "group": "11 Huntingwood",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "18:30",
+      "activo": "SI",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenos días chicos,\n\nComo recordatorio, les pido de su amable apoyo para:\n* Lavar, secar y guardar los trastes que utilicen.\n* Barrer la cocina y dejarla limpia para que la siguiente persona la encuentre en las mismas condiciones.\n* Apagar todas las luces que no estén utilizando.\n* Colocar las sillas del comedor en su lugar después de usarlas.\n\nMuchas gracias por su colaboración para mantener la casa limpia y ordenada.",
+      "notas": "",
+      "filtrarCasa": "11 Huntingwood"
+    },
+    {
+      "id": 96,
+      "group": "11 Huntingwood",
+      "category": "Limpieza y orden",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": true,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "12:00",
+      "activo": "SI",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "*Buenas tardes a todos.*\n\nSolo para confirmar si hace falta algún material de limpieza, bolsas de basura o jabón. Por favor, avísenme para que *el equipo de Clean & Clear* pueda llevarlo el día de mañana.\n\nLes recuerdo que *el equipo de Clean & Clear no trabaja los fines de semana*, por lo que es importante avisar con anticipación.\n\n¡Gracias!",
+      "notas": "",
+      "filtrarCasa": "11 Huntingwood"
+    },
+    {
+      "id": 97,
+      "group": "11 Huntingwood",
+      "category": "Estufa y luces",
+      "scheduleType": "weekly",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": true,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "14:30",
+      "activo": "SI",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "*Buenas tardes a todos.*\n\nComo recordatorio, *no deben dejar objetos personales en la sala ni en la cocina*. Todo debe mantenerse guardado en sus cajones o espacios asignados.\n\nNo nos hacemos responsables por objetos perdidos o extraviados que se dejen en las áreas comunes.\n\nRecuerden que *las áreas comunes son para el uso y beneficio de todos*, por lo que es importante mantenerlas ordenadas.\n\n¡Gracias por su cooperación!",
+      "notas": "",
+      "filtrarCasa": "11 Huntingwood"
+    },
+    {
+      "id": 98,
+      "group": "11 Huntingwood",
+      "category": "Basura y Recoleccion",
+      "scheduleType": "interval",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "2026-07-13",
+        "everyWeeks": 2
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "SI",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos.\n\nComo recordatorio, esta semana corresponde sacar:\n\n🔵 Bote azul (reciclaje)\n🟢 Bote verde (orgánicos)\n\nPor favor, envíen una foto como evidencia una vez que los hayan sacado para mantener el control.\n\nLes recordamos que, si los botes no se sacan a tiempo, ustedes serán responsables de llevar la basura al centro de recolección, lo que puede generar costos adicionales. Por eso, es importante cumplir con esta responsabilidad.\n\n¡Gracias por su colaboración!",
+      "notas": "",
+      "filtrarCasa": "11 Huntingwood"
+    },
+    {
+      "id": 99,
+      "group": "11 Huntingwood",
+      "category": "Basura y Recoleccion",
+      "scheduleType": "monthly",
+      "monthly": {
+        "ordinals": [
+          1
+        ],
+        "weekday": "vie"
+      },
+      "interval": {
+        "startDate": "",
+        "everyWeeks": 0
+      },
+      "days": {
+        "lun": false,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": true,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "17:00",
+      "activo": "SI",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "*Buenas tardes a todos.*\n\nLes recordamos que *está prohibido recoger muebles u otros artículos de la basura* e ingresarlos a la casa, ya que pueden traer plagas.\n\nSi una plaga se origina por un objeto ingresado por un residente, *esa persona será responsable de pagar la fumigación de toda la casa. Si alguien detecta una plaga y no la reporta a tiempo, **todos los residentes compartirán el costo de la fumigación*.\n\nGracias por su cooperación.",
+      "notas": "",
+      "filtrarCasa": "11 Huntingwood"
+    },
+    {
+      "id": 100,
+      "group": "11 Huntingwood",
+      "category": "Basura y Recoleccion",
+      "scheduleType": "interval",
+      "monthly": {
+        "ordinals": [],
+        "weekday": ""
+      },
+      "interval": {
+        "startDate": "2026-07-20",
+        "everyWeeks": 2
+      },
+      "days": {
+        "lun": true,
+        "mar": false,
+        "mie": false,
+        "jue": false,
+        "vie": false,
+        "sab": false,
+        "dom": false
+      },
+      "hora": "19:00",
+      "activo": "SI",
+      "enviarManual": "NO",
+      "estado": "PENDIENTE",
+      "ultimoEnvio": "",
+      "mensaje": "Buenas noches a todos.\n\nComo recordatorio, esta semana corresponde sacar:\n\n⚫ Bote negro (basura)\n🟢 Bote verde (orgánicos)\n\nPor favor, envíen una foto como evidencia una vez que los hayan sacado para mantener el control.\n\nLes recordamos que, si los botes no se sacan a tiempo, ustedes serán responsables de llevar la basura al centro de recolección, lo que puede generar costos adicionales. Por eso, es importante cumplir con esta responsabilidad.\n\n¡Gracias por su colaboración!\n(SIguiente ejecucion 27 de Julio)",
+      "notas": "",
+      "filtrarCasa": "11 Huntingwood"
+    }
+  ]
+}

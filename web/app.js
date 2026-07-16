@@ -9,10 +9,35 @@ const state = {
   houseMenuOpen: false,
   saveTimers: new Map(),
   savingRows: new Set(),
+  selectedRows: new Set(),
   refreshPaused: false,
+  sort: { key: 'group', direction: 'asc' },
+  settings: { mode: 'production', timeStepMinutes: 30 },
 };
 
 const $ = (id) => document.getElementById(id);
+const DEFAULT_TIME_STEP_MINUTES = 30;
+const SORT_COLUMNS = [
+  { index: 1, key: 'group', label: 'Casa' },
+  { index: 2, key: 'category', label: 'Categoría' },
+  { index: 3, key: 'schedule', label: 'Días' },
+  { index: 4, key: 'hora', label: 'Hora' },
+  { index: 5, key: 'activo', label: 'Estado' },
+  { index: 6, key: 'estado', label: 'Resultado' },
+  { index: 7, key: 'proximoEnvio', label: 'Próximo envío' },
+  { index: 8, key: 'ultimoEnvio', label: 'Último envío' },
+  { index: 9, key: 'mensaje', label: 'Mensaje' },
+  { index: 10, key: 'notas', label: 'Notas' },
+];
+const DAY_LABELS = {
+  lun: 'Lunes',
+  mar: 'Martes',
+  mie: 'Miércoles',
+  jue: 'Jueves',
+  vie: 'Viernes',
+  sab: 'Sábado',
+  dom: 'Domingo',
+};
 
 function toast(message) {
   const el = $('toast');
@@ -42,6 +67,38 @@ function escapeHtml(value) {
 function shortText(value, max = 95) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+function timeStepMinutes() {
+  const step = Number(state.settings?.timeStepMinutes || DEFAULT_TIME_STEP_MINUTES);
+  return Number.isInteger(step) && step >= 1 && step <= 60 ? step : DEFAULT_TIME_STEP_MINUTES;
+}
+
+function normalizeHoraUi(value) {
+  const match = String(value ?? '').match(/(\d{1,2}):(\d{2})/);
+  if (!match) return '';
+  const h = Math.max(0, Math.min(23, Number(match[1])));
+  const m = Math.max(0, Math.min(59, Number(match[2])));
+  const total = h * 60 + m;
+  const step = timeStepMinutes();
+  const rounded = Math.min(23 * 60 + (60 - step), Math.max(0, Math.round(total / step) * step));
+  return `${String(Math.floor(rounded / 60)).padStart(2, '0')}:${String(rounded % 60).padStart(2, '0')}`;
+}
+
+function timeOptions(selectedValue = '', { includeBlank = true } = {}) {
+  const selected = normalizeHoraUi(selectedValue);
+  const options = [];
+  if (includeBlank) options.push('<option value="">Sin hora</option>');
+  const step = timeStepMinutes();
+  for (let total = 0; total <= 23 * 60 + (60 - step); total += step) {
+    const value = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+    options.push(`<option value="${value}" ${value === selected ? 'selected' : ''}>${value} hrs</option>`);
+  }
+  return options.join('');
+}
+
+function fillModalTimeOptions(selectedValue = '') {
+  $('modalHora').innerHTML = timeOptions(selectedValue);
 }
 
 function renderFilters() {
@@ -82,13 +139,43 @@ function restoreFilters(filters) {
   if ($('searchBox')) $('searchBox').value = filters.search || '';
 }
 
+function scheduleSortValue(r) {
+  if (r.scheduleType === 'monthly') {
+    return `monthly ${(r.monthly?.weekday || '')} ${(r.monthly?.ordinals || []).join('-')}`;
+  }
+  if (r.scheduleType === 'interval') {
+    return `interval ${r.interval?.startDate || ''} ${r.interval?.everyWeeks || ''}`;
+  }
+  return `weekly ${Object.entries(r.days || {})
+    .filter(([, enabled]) => enabled)
+    .map(([day]) => day)
+    .join('-')}`;
+}
+
+function sortValue(r, key) {
+  if (key === 'schedule') return scheduleSortValue(r);
+  if (key === 'hora') return normalizeHoraUi(r.hora) || '99:99';
+  if (key === 'activo') return r.activo === 'SI' ? 'Activo' : 'Desactivado';
+  return String(r[key] ?? '').toLowerCase();
+}
+
+function sortReminders(reminders) {
+  const { key, direction } = state.sort;
+  const multiplier = direction === 'desc' ? -1 : 1;
+  return [...reminders].sort((a, b) => {
+    const left = sortValue(a, key);
+    const right = sortValue(b, key);
+    return left.localeCompare(right, 'es', { numeric: true, sensitivity: 'base' }) * multiplier;
+  });
+}
+
 function filteredReminders() {
   const category = $('categoryFilter').value;
   const status = $('statusFilter').value;
   const active = $('activeFilter').value;
   const search = $('searchBox').value.trim().toLowerCase();
 
-  return state.reminders.filter((r) => {
+  const filtered = state.reminders.filter((r) => {
     if (state.selectedHouses.size && !state.selectedHouses.has(r.filtrarCasa || r.group)) return false;
     if (category && r.category !== category) return false;
     if (status && r.estado !== status) return false;
@@ -99,6 +186,8 @@ function filteredReminders() {
     }
     return true;
   });
+
+  return sortReminders(filtered);
 }
 
 function setModalCategory(value) {
@@ -163,42 +252,110 @@ function dayCheckbox(r, key, label) {
     </label>`;
 }
 
+function ordinalLabel(value) {
+  return {
+    1: '1er',
+    2: '2do',
+    3: '3er',
+    4: '4to',
+    5: '5to',
+  }[Number(value)] || String(value);
+}
+
+function scheduleCell(r) {
+  if (r.scheduleType === 'interval') {
+    const everyWeeks = Number(r.interval?.everyWeeks || 0);
+    const startDate = r.interval?.startDate || 'fecha pendiente';
+    const label = everyWeeks === 1 ? 'cada semana' : `cada ${everyWeeks || '?'} semanas`;
+    return `<span class="schedule-pill schedule-edit" data-action="edit" title="Editar programacion">Intervalo: ${escapeHtml(label)} desde ${escapeHtml(startDate)}</span>`;
+  }
+  if (r.scheduleType === 'monthly') {
+    const ordinals = (r.monthly?.ordinals || []).map(ordinalLabel).join(' y ');
+    const day = DAY_LABELS[r.monthly?.weekday] || 'día pendiente';
+    return `<span class="schedule-pill schedule-edit" data-action="edit" title="Editar programacion">Mensual: ${escapeHtml(ordinals || '?')} ${escapeHtml(day)}</span>`;
+  }
+
+  return `
+    ${dayCheckbox(r, 'lun', 'L')}
+    ${dayCheckbox(r, 'mar', 'M')}
+    ${dayCheckbox(r, 'mie', 'X')}
+    ${dayCheckbox(r, 'jue', 'J')}
+    ${dayCheckbox(r, 'vie', 'V')}
+    ${dayCheckbox(r, 'sab', 'S')}
+    ${dayCheckbox(r, 'dom', 'D')}
+  `;
+}
+
+function activeToggle(r) {
+  const isActive = r.activo === 'SI';
+  return `
+    <label class="state-toggle ${isActive ? 'is-active' : 'is-disabled'}" title="${isActive ? 'Activo' : 'Desactivado'}">
+      <input type="checkbox" name="activoToggle" data-autosave ${isActive ? 'checked' : ''} />
+      <span class="toggle-track"><span class="toggle-knob"></span></span>
+      <span class="toggle-label">${isActive ? 'Activo' : 'Desactivado'}</span>
+    </label>`;
+}
+
+function setModalActive(value) {
+  const isActive = value === 'SI';
+  const input = $('modalActivo');
+  const wrapper = $('modalActivoToggle');
+  const label = $('modalActivoLabel');
+  input.checked = isActive;
+  wrapper.classList.toggle('is-active', isActive);
+  wrapper.classList.toggle('is-disabled', !isActive);
+  wrapper.title = isActive ? 'Activo' : 'Desactivado';
+  label.textContent = isActive ? 'Activo' : 'Desactivado';
+}
+
+function setModalScheduleType(value) {
+  const scheduleType = ['weekly', 'monthly', 'interval'].includes(value) ? value : 'weekly';
+  $('modalScheduleType').value = scheduleType;
+  $('weeklyScheduleFields').classList.toggle('hidden', scheduleType !== 'weekly');
+  $('monthlyScheduleFields').classList.toggle('hidden', scheduleType !== 'monthly');
+  $('intervalScheduleFields').classList.toggle('hidden', scheduleType !== 'interval');
+}
+
+function setModalMonthly(monthly = {}) {
+  const ordinals = new Set((monthly.ordinals || []).map(Number));
+  document.querySelectorAll('.monthly-ordinal').forEach((input) => {
+    input.checked = ordinals.has(Number(input.value));
+  });
+  $('modalMonthlyWeekday').value = monthly.weekday || '';
+}
+
+function setModalInterval(interval = {}) {
+  $('modalIntervalStartDate').value = interval.startDate || '';
+  const everyWeeks = Number(interval.everyWeeks || 2);
+  const option = [...$('modalIntervalWeeks').options].find((item) => Number(item.value) === everyWeeks);
+  $('modalIntervalWeeks').value = option ? String(everyWeeks) : '2';
+}
+
 function renderReminders() {
   const body = $('reminderGrid');
   const reminders = filteredReminders();
+  state.selectedRows = new Set([...state.selectedRows].filter((row) => state.reminders.some((r) => r.row === row)));
+  updateBulkDeleteControls(reminders);
+  renderSortIndicators();
 
   if (!reminders.length) {
-    body.innerHTML = '<tr><td colspan="13" class="empty">No hay recordatorios con esos filtros.</td></tr>';
+    body.innerHTML = '<tr><td colspan="12" class="empty">No hay recordatorios con esos filtros.</td></tr>';
     return;
   }
 
   body.innerHTML = reminders.map((r) => `
-    <tr data-row="${r.row}" class="${state.savingRows.has(r.row) ? 'saving' : ''}">
-      <td class="mono">${r.row}</td>
+    <tr data-row="${r.row}" class="${[
+      state.savingRows.has(r.row) ? 'saving' : '',
+      r.activo === 'NO' ? 'disabled-reminder' : '',
+    ].filter(Boolean).join(' ')}">
+      <td class="select-cell">
+        <input type="checkbox" class="row-select" data-row-select value="${r.row}" ${state.selectedRows.has(r.row) ? 'checked' : ''} />
+      </td>
       <td class="house-cell">${escapeHtml(r.group)}</td>
       <td class="category-readonly">${escapeHtml(r.category || 'Sin categoría')}</td>
-      <td class="days-cell">
-        ${dayCheckbox(r, 'lun', 'L')}
-        ${dayCheckbox(r, 'mar', 'M')}
-        ${dayCheckbox(r, 'mie', 'X')}
-        ${dayCheckbox(r, 'jue', 'J')}
-        ${dayCheckbox(r, 'vie', 'V')}
-        ${dayCheckbox(r, 'sab', 'S')}
-        ${dayCheckbox(r, 'dom', 'D')}
-      </td>
-      <td><input class="time-input" name="hora" data-autosave value="${escapeHtml(r.hora)}" placeholder="10:20 hrs" /></td>
-      <td>
-        <select name="activo" data-autosave>
-          <option ${r.activo === 'SI' ? 'selected' : ''}>SI</option>
-          <option ${r.activo === 'NO' ? 'selected' : ''}>NO</option>
-        </select>
-      </td>
-      <td>
-        <select name="enviarManual" data-autosave>
-          <option ${r.enviarManual === 'NO' ? 'selected' : ''}>NO</option>
-          <option ${r.enviarManual === 'SI' ? 'selected' : ''}>SI</option>
-        </select>
-      </td>
+      <td class="days-cell">${scheduleCell(r)}</td>
+      <td><select class="time-input" name="hora" data-autosave>${timeOptions(r.hora)}</select></td>
+      <td>${activeToggle(r)}</td>
       <td><span class="badge ${escapeHtml(r.estado)}">${escapeHtml(r.estado || 'SIN ESTADO')}</span></td>
       <td class="date-cell">${escapeHtml(r.proximoEnvio || 'Sin próximo envío')}</td>
       <td class="date-cell">${escapeHtml(r.ultimoEnvio || 'Sin envíos')}</td>
@@ -211,6 +368,63 @@ function renderReminders() {
       </td>
     </tr>
   `).join('');
+  updateBulkDeleteControls(reminders);
+}
+
+function updateBulkDeleteControls(visibleReminders = filteredReminders()) {
+  const selectedCount = state.selectedRows.size;
+  const bulkButton = $('bulkDeleteBtn');
+  if (bulkButton) {
+    bulkButton.classList.toggle('hidden', selectedCount === 0);
+    bulkButton.textContent = selectedCount === 1
+      ? 'Eliminar 1 seleccionado'
+      : `Eliminar ${selectedCount} seleccionados`;
+  }
+
+  const selectVisible = $('selectVisibleRows');
+  if (selectVisible) {
+    const visibleRows = visibleReminders.map((r) => r.row);
+    const selectedVisible = visibleRows.filter((row) => state.selectedRows.has(row));
+    selectVisible.checked = visibleRows.length > 0 && selectedVisible.length === visibleRows.length;
+    selectVisible.indeterminate = selectedVisible.length > 0 && selectedVisible.length < visibleRows.length;
+  }
+}
+
+function initializeSortHeaders() {
+  const headers = document.querySelectorAll('.reminders-table thead th');
+  SORT_COLUMNS.forEach(({ index, key, label }) => {
+    const th = headers[index];
+    if (!th) return;
+    th.innerHTML = `
+      <button type="button" class="sort-header" data-sort="${key}">
+        <span>${escapeHtml(label)}</span>
+        <span class="sort-arrow" data-sort-arrow="${key}">-</span>
+      </button>
+    `;
+  });
+
+  document.querySelectorAll('[data-sort]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const key = button.dataset.sort;
+      if (state.sort.key === key) {
+        state.sort.direction = state.sort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.sort = { key, direction: 'asc' };
+      }
+      renderReminders();
+    });
+  });
+  renderSortIndicators();
+}
+
+function renderSortIndicators() {
+  document.querySelectorAll('[data-sort-arrow]').forEach((arrow) => {
+    const key = arrow.dataset.sortArrow;
+    arrow.textContent = state.sort.key === key
+      ? (state.sort.direction === 'asc' ? '^' : 'v')
+      : '-';
+    arrow.closest('.sort-header')?.classList.toggle('active-sort', state.sort.key === key);
+  });
 }
 
 function rowElement(row) {
@@ -224,14 +438,19 @@ function reminderByRow(row) {
 function payloadFromRow(row) {
   const tr = rowElement(row);
   const current = reminderByRow(row);
+  const scheduleType = current.scheduleType || 'weekly';
+  const isWeekly = scheduleType === 'weekly';
   return {
     group: current.group,
     category: current.category,
+    scheduleType,
+    monthly: current.monthly || { ordinals: [], weekday: '' },
+    interval: current.interval || { startDate: '', everyWeeks: 0 },
     hora: tr.querySelector('[name="hora"]').value,
-    activo: tr.querySelector('[name="activo"]').value,
-    enviarManual: tr.querySelector('[name="enviarManual"]').value,
+    activo: tr.querySelector('[name="activoToggle"]').checked ? 'SI' : 'NO',
+    enviarManual: current.enviarManual || 'NO',
     mensaje: current.mensaje,
-    days: {
+    days: !isWeekly ? current.days : {
       lun: tr.querySelector('[name="lun"]').checked,
       mar: tr.querySelector('[name="mar"]').checked,
       mie: tr.querySelector('[name="mie"]').checked,
@@ -244,12 +463,23 @@ function payloadFromRow(row) {
 }
 
 function payloadFromModal() {
+  const current = state.modalMode === 'edit' ? reminderByRow(state.modalRow) : null;
+  const scheduleType = $('modalScheduleType').value;
   return {
     group: $('modalGroup').value.trim(),
     category: $('modalCategory').value.trim(),
-    hora: $('modalHora').value.trim(),
-    activo: $('modalActivo').value,
-    enviarManual: $('modalManual').value,
+    scheduleType,
+    monthly: {
+      ordinals: [...document.querySelectorAll('.monthly-ordinal:checked')].map((input) => Number(input.value)),
+      weekday: $('modalMonthlyWeekday').value,
+    },
+    interval: {
+      startDate: $('modalIntervalStartDate').value,
+      everyWeeks: Number($('modalIntervalWeeks').value),
+    },
+    hora: $('modalHora').value,
+    activo: $('modalActivo').checked ? 'SI' : 'NO',
+    enviarManual: current ? current.enviarManual : 'NO',
     mensaje: $('modalMessage').value,
     days: {
       lun: $('modalLun').checked,
@@ -267,6 +497,7 @@ function updateStateFromWorkbook(workbook, filters = captureFilters()) {
   state.reminders = workbook.reminders;
   state.houses = workbook.houses;
   state.categories = workbook.categories;
+  state.selectedRows = new Set([...state.selectedRows].filter((row) => state.reminders.some((r) => r.row === row)));
   if (filters) state.selectedHouses = new Set([...filters.houses].filter((h) => state.houses.includes(h)));
   renderFilters();
   restoreFilters(filters);
@@ -291,7 +522,7 @@ async function saveRow(row, payload, { quiet = false } = {}) {
     });
     state.savingRows.delete(row);
     updateStateFromWorkbook(data.workbook, filters);
-    if (!quiet) toast('Guardado en Excel.');
+    if (!quiet) toast('Guardado.');
   } catch (error) {
     state.savingRows.delete(row);
     renderReminders();
@@ -318,16 +549,18 @@ function openEditModal(row) {
   state.modalRow = row;
   state.refreshPaused = true;
   $('modalTitle').textContent = `Editar fila ${row}`;
-  $('modalSubtitle').textContent = 'Estos cambios se guardan directamente en Excel.';
+  $('modalSubtitle').textContent = 'Estos cambios se guardan automáticamente.';
   setModalHouse(reminder.group || '');
   state.houseMenuOpen = false;
   renderHouseCombo();
   setModalCategory(reminder.category || '');
   state.categoryMenuOpen = false;
   renderCategoryCombo();
-  $('modalHora').value = reminder.hora || '';
-  $('modalActivo').value = reminder.activo || 'NO';
-  $('modalManual').value = reminder.enviarManual || 'NO';
+  fillModalTimeOptions(reminder.hora || '');
+  setModalScheduleType(reminder.scheduleType || 'weekly');
+  setModalMonthly(reminder.monthly || {});
+  setModalInterval(reminder.interval || {});
+  setModalActive(reminder.activo || 'NO');
   $('modalMessage').value = reminder.mensaje || '';
   $('modalNotes').value = reminder.notas || '';
   $('modalLun').checked = Boolean(reminder.days.lun);
@@ -345,16 +578,18 @@ function openAddModal() {
   state.modalRow = null;
   state.refreshPaused = true;
   $('modalTitle').textContent = 'Agregar recordatorio';
-  $('modalSubtitle').textContent = 'Se creará una nueva fila en Excel.';
+  $('modalSubtitle').textContent = 'Se creará un nuevo recordatorio.';
   setModalHouse(state.houses[0] || '');
   state.houseMenuOpen = false;
   renderHouseCombo();
   setModalCategory(state.categories[0] || '');
   state.categoryMenuOpen = false;
   renderCategoryCombo();
-  $('modalHora').value = '';
-  $('modalActivo').value = 'SI';
-  $('modalManual').value = 'NO';
+  fillModalTimeOptions('');
+  setModalScheduleType('weekly');
+  setModalMonthly({});
+  setModalInterval({});
+  setModalActive('SI');
   $('modalMessage').value = '';
   $('modalNotes').value = 'Las notas se generan por el sistema después de enviar.';
   $('modalLun').checked = false;
@@ -377,6 +612,26 @@ async function saveModal() {
     toast('El mensaje no puede quedar vacío.');
     return;
   }
+  if (payload.scheduleType === 'monthly') {
+    if (!payload.monthly.ordinals.length) {
+      toast('Selecciona al menos una semana del mes.');
+      return;
+    }
+    if (!payload.monthly.weekday) {
+      toast('Selecciona el día mensual.');
+      return;
+    }
+  }
+  if (payload.scheduleType === 'interval') {
+    if (!payload.interval.startDate) {
+      toast('Selecciona la fecha base del intervalo.');
+      return;
+    }
+    if (!payload.interval.everyWeeks) {
+      toast('Selecciona cada cuantas semanas se repite.');
+      return;
+    }
+  }
   $('editModal').close();
   state.refreshPaused = false;
 
@@ -388,7 +643,7 @@ async function saveModal() {
         body: JSON.stringify(payload),
       });
       updateStateFromWorkbook(data.workbook, filters);
-      toast('Recordatorio agregado en Excel.');
+      toast('Recordatorio agregado.');
     } catch (error) {
       toast(`Error agregando recordatorio: ${error.message}`);
     }
@@ -403,15 +658,46 @@ async function deleteRow(row) {
   const reminder = reminderByRow(row);
   if (!reminder) return;
   const filters = captureFilters();
-  const ok = window.confirm(`Vas a eliminar la fila ${row} de Excel:\n\n${reminder.group}\n${reminder.category}\n\nEsta acción no se puede deshacer automáticamente. ¿Continuar?`);
+  const ok = window.confirm(`Vas a eliminar el recordatorio ${row}:\n\n${reminder.group}\n${reminder.category}\n\nEsta acción no se puede deshacer automáticamente. ¿Continuar?`);
   if (!ok) return;
 
   try {
     const data = await api(`/api/reminders/${row}`, { method: 'DELETE' });
     updateStateFromWorkbook(data.workbook, filters);
-    toast('Recordatorio eliminado de Excel.');
+    toast('Recordatorio eliminado.');
   } catch (error) {
     toast(`Error eliminando fila ${row}: ${error.message}`);
+  }
+}
+
+async function deleteSelectedRows() {
+  const rows = [...state.selectedRows].sort((a, b) => a - b);
+  if (!rows.length) return;
+
+  const selected = rows
+    .map((row) => reminderByRow(row))
+    .filter(Boolean);
+  const preview = selected
+    .slice(0, 12)
+    .map((r) => `- ${r.row}: ${r.group} [${r.category || 'Sin categoría'}]`)
+    .join('\n');
+  const extra = selected.length > 12 ? `\n... y ${selected.length - 12} más.` : '';
+  const ok = window.confirm(
+    `Vas a eliminar ${rows.length} recordatorio(s):\n\n${preview}${extra}\n\nEsta acción no se puede deshacer automáticamente. ¿Continuar?`
+  );
+  if (!ok) return;
+
+  const filters = captureFilters();
+  try {
+    const data = await api('/api/reminders/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
+    });
+    state.selectedRows.clear();
+    updateStateFromWorkbook(data.workbook, filters);
+    toast(`Eliminados ${rows.length} recordatorio(s).`);
+  } catch (error) {
+    toast(`Error eliminando seleccionados: ${error.message}`);
   }
 }
 
@@ -429,8 +715,13 @@ async function loadReminders() {
   renderReminders();
 }
 
+async function loadSettings() {
+  state.settings = await api('/api/settings');
+}
+
 async function loadStatus() {
   const s = await api('/api/status');
+  if (s.settings) state.settings = s.settings;
   const pill = $('servicePill');
   const pauseButton = $('pauseToggle');
   if (!s.running) {
@@ -499,6 +790,34 @@ async function serviceAction(path, message) {
   }
 }
 
+async function activateMode(mode) {
+  const isDebug = mode === 'debug';
+  const settings = isDebug
+    ? { mode: 'debug', timeStepMinutes: 1, serviceIntervalMs: 120000, sendWindowMinutes: 3 }
+    : { mode: 'production', timeStepMinutes: 30, serviceIntervalMs: 300000, sendWindowMinutes: 10 };
+  const buttons = ['debugMode', 'productionMode', 'restartService'].map((id) => $(id)).filter(Boolean);
+  buttons.forEach((button) => { button.disabled = true; });
+  try {
+    const result = await api('/api/settings', {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    });
+    state.settings = result.settings;
+    await api('/api/service/restart', { method: 'POST', body: '{}' });
+    await loadStatus();
+    await loadReminders();
+    toast(isDebug
+      ? 'Modo Debug activado: revision 2 min, ventana 3 min, hora cada minuto.'
+      : 'Modo Produccion activado: revision 5 min, ventana 10 min, hora cada 30 min.');
+  } catch (error) {
+    toast(`Error activando modo: ${error.message}`);
+  } finally {
+    setTimeout(() => {
+      buttons.forEach((button) => { button.disabled = false; });
+    }, 1500);
+  }
+}
+
 document.querySelectorAll('.tab').forEach((btn) => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
@@ -522,17 +841,27 @@ $('houseFilter').addEventListener('change', (event) => {
 });
 
 $('reminderGrid').addEventListener('click', (event) => {
-  const button = event.target.closest('button[data-action]');
-  if (!button) return;
+  const actionElement = event.target.closest('[data-action]');
+  if (!actionElement) return;
 
   const tr = event.target.closest('tr[data-row]');
+  if (!tr) return;
   const row = Number(tr.dataset.row);
 
-  if (button.dataset.action === 'edit') openEditModal(row);
-  if (button.dataset.action === 'delete') deleteRow(row);
+  if (actionElement.dataset.action === 'edit') openEditModal(row);
+  if (actionElement.dataset.action === 'delete') deleteRow(row);
 });
 
 $('reminderGrid').addEventListener('change', (event) => {
+  const selected = event.target.closest('[data-row-select]');
+  if (selected) {
+    const row = Number(selected.value);
+    if (selected.checked) state.selectedRows.add(row);
+    else state.selectedRows.delete(row);
+    updateBulkDeleteControls();
+    return;
+  }
+
   const field = event.target.closest('[data-autosave]');
   if (!field) return;
   const tr = event.target.closest('tr[data-row]');
@@ -549,6 +878,12 @@ $('reminderGrid').addEventListener('focusout', (event) => {
 $('editModalForm').addEventListener('submit', (event) => {
   event.preventDefault();
   saveModal();
+});
+$('modalActivo').addEventListener('change', () => {
+  setModalActive($('modalActivo').checked ? 'SI' : 'NO');
+});
+$('modalScheduleType').addEventListener('change', () => {
+  setModalScheduleType($('modalScheduleType').value);
 });
 $('houseComboButton').addEventListener('click', () => toggleHouseCombo());
 $('houseComboMenu').addEventListener('click', async (event) => {
@@ -578,7 +913,7 @@ $('houseComboMenu').addEventListener('click', async (event) => {
     const usos = state.reminders.filter((r) => (r.filtrarCasa || r.group) === house || r.group === house).length;
     const ok = window.confirm(
       usos
-        ? `La casa "${house}" está usada en ${usos} recordatorio(s).\n\nSi continúas, se quitará esa casa de esas filas y se marcarán como Activo = NO para evitar envíos accidentales. ¿Continuar?`
+        ? `La casa "${house}" está usada en ${usos} recordatorio(s).\n\nSi continúas, se quitará esa casa de esas filas y se marcarán como Desactivado para evitar envíos accidentales. ¿Continuar?`
         : `¿Eliminar la casa "${house}" del selector?`
     );
     if (!ok) return;
@@ -589,7 +924,7 @@ $('houseComboMenu').addEventListener('click', async (event) => {
         updateStateFromWorkbook(data.workbook);
         setModalHouse('');
         renderHouseCombo();
-        toast('Casa eliminada de Excel y filas desactivadas.');
+        toast('Casa eliminada y filas desactivadas.');
       } catch (error) {
         toast(`Error eliminando casa: ${error.message}`);
       }
@@ -630,7 +965,7 @@ $('categoryComboMenu').addEventListener('click', async (event) => {
     const usos = state.reminders.filter((r) => r.category === category).length;
     const ok = window.confirm(
       usos
-        ? `La categoría "${category}" está usada en ${usos} recordatorio(s).\n\nSi continúas, esa categoría se quitará de esas filas en Excel. ¿Continuar?`
+        ? `La categoría "${category}" está usada en ${usos} recordatorio(s).\n\nSi continúas, esa categoría se quitará de esas filas. ¿Continuar?`
         : `¿Eliminar la categoría "${category}" del selector?`
     );
     if (!ok) return;
@@ -641,7 +976,7 @@ $('categoryComboMenu').addEventListener('click', async (event) => {
         updateStateFromWorkbook(data.workbook);
         setModalCategory('');
         renderCategoryCombo();
-        toast('Categoría eliminada de Excel.');
+        toast('Categoría eliminada.');
       } catch (error) {
         toast(`Error eliminando categoría: ${error.message}`);
       }
@@ -666,13 +1001,28 @@ $('editModal').addEventListener('close', () => {
   state.refreshPaused = false;
 });
 $('addBtn').addEventListener('click', openAddModal);
+$('bulkDeleteBtn').addEventListener('click', deleteSelectedRows);
+$('selectVisibleRows').addEventListener('change', (event) => {
+  const visibleRows = filteredReminders().map((r) => r.row);
+  if (event.target.checked) {
+    visibleRows.forEach((row) => state.selectedRows.add(row));
+  } else {
+    visibleRows.forEach((row) => state.selectedRows.delete(row));
+  }
+  renderReminders();
+});
 $('pauseToggle').addEventListener('click', togglePause);
 $('refreshStatus').addEventListener('click', () => loadStatus().then(() => toast('Estado actualizado.')));
 $('startService').addEventListener('click', () => serviceAction('/api/service/start', 'Servicio iniciado.'));
 $('stopService').addEventListener('click', () => serviceAction('/api/service/stop', 'Servicio detenido.'));
 $('restartService').addEventListener('click', () => serviceAction('/api/service/restart', 'Servicio reiniciado.'));
+$('debugMode').addEventListener('click', () => activateMode('debug'));
+$('productionMode').addEventListener('click', () => activateMode('production'));
 
-loadReminders().catch((e) => toast(e.message));
+initializeSortHeaders();
+loadSettings()
+  .then(loadReminders)
+  .catch((e) => toast(e.message));
 loadStatus().catch(() => {});
 setInterval(loadStatus, 15000);
 setInterval(() => {

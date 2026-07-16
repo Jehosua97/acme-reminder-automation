@@ -3,20 +3,23 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { spawn, spawnSync } = require('child_process');
-const XLSX = require('xlsx');
+const { spawnSync } = require('child_process');
+const {
+  readWorkbookLike,
+  readSettings,
+  writeSettings,
+  createReminder,
+  updateReminder,
+  deleteReminder,
+  deleteReminders,
+  deleteCategory,
+  deleteHouse,
+} = require('./data_store');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const WORKBOOK = path.join(PROJECT_ROOT, 'workbooks', 'RecordatoriosWhatsApp_Programados.xlsx');
 const RUNTIME = path.join(PROJECT_ROOT, 'runtime');
 const WEB_ROOT = path.join(PROJECT_ROOT, 'web');
 const PAUSE_FILE = path.join(RUNTIME, 'sistema_pausado.flag');
-const CREATE_SCRIPT = path.join(__dirname, 'AgregarRecordatorioDesdeWeb.ps1');
-const UPDATE_SCRIPT = path.join(__dirname, 'ActualizarRecordatorioDesdeWeb.ps1');
-const DELETE_SCRIPT = path.join(__dirname, 'EliminarRecordatorioDesdeWeb.ps1');
-const DELETE_CATEGORY_SCRIPT = path.join(__dirname, 'EliminarCategoriaDesdeWeb.ps1');
-const DELETE_HOUSE_SCRIPT = path.join(__dirname, 'EliminarCasaDesdeWeb.ps1');
-const START_SCRIPT = path.join(__dirname, 'IniciarServicioWhatsApp.ps1');
 const START_BACKGROUND_SCRIPT = path.join(__dirname, 'IniciarServicioWhatsAppBackground.ps1');
 const STOP_SCRIPT = path.join(__dirname, 'DetenerServicioWhatsApp.ps1');
 
@@ -26,69 +29,22 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(WEB_ROOT));
 
-function text(value) {
-  return value === undefined || value === null ? '' : String(value);
-}
-
-function bool(value) {
-  const normalized = text(value).trim().toUpperCase();
-  return normalized === 'TRUE' || normalized === 'SI' || normalized === 'YES' || normalized === '1';
-}
-
-function readWorkbook() {
-  const wb = XLSX.readFile(WORKBOOK, { cellDates: false });
-  const ws = wb.Sheets['Recordatorios Programados'];
-  if (!ws) throw new Error('No se encontro la hoja Recordatorios Programados.');
-
-  const rows = XLSX.utils.sheet_to_json(ws, {
-    header: 1,
-    defval: '',
-    raw: false,
-    blankrows: true,
-  });
-
-  const reminders = [];
-  for (let i = 4; i < rows.length; i += 1) {
-    const r = rows[i];
-    const group = text(r[0]).trim();
-    const message = text(r[15]).trim();
-    if (!group || group.startsWith('CASA / GRUPO:') || !message) continue;
-
-    reminders.push({
-      row: i + 1,
-      group,
-      category: text(r[1]).trim(),
-      days: {
-        lun: bool(r[2]),
-        mar: bool(r[3]),
-        mie: bool(r[4]),
-        jue: bool(r[5]),
-        vie: bool(r[6]),
-        sab: bool(r[7]),
-        dom: bool(r[8]),
-      },
-      hora: text(r[9]).trim(),
-      activo: text(r[10]).trim() || 'NO',
-      enviarManual: text(r[11]).trim() || 'NO',
-      estado: text(r[12]).trim(),
-      ultimoEnvio: text(r[13]).trim(),
-      proximoEnvio: text(r[14]).trim(),
-      mensaje: text(r[15]),
-      notas: text(r[16]),
-      filtrarCasa: text(r[17]).trim() || group,
-    });
-  }
-
-  const houses = [...new Set(reminders.map((r) => r.filtrarCasa || r.group))].sort();
-  const categories = [...new Set(reminders.map((r) => r.category).filter(Boolean))].sort();
-  return { reminders, houses, categories, updatedAt: new Date().toISOString() };
-}
-
 function tail(file, lines = 120) {
   const full = path.join(RUNTIME, file);
   if (!fs.existsSync(full)) return '';
   const content = fs.readFileSync(full, 'utf8');
-  return content.split(/\r?\n/).slice(-lines).join('\n');
+  return content
+    .split(/\r?\n/)
+    .filter((line) => (
+      !/Data source:/i.test(line) &&
+      !/Archivo:\s*.*RecordatoriosWhatsApp/i.test(line) &&
+      !/workbooks\\RecordatoriosWhatsApp/i.test(line) &&
+      !/UPDATE EXCEL/i.test(line) &&
+      !/Excel actualizado/i.test(line) &&
+      !/actualiza Excel/i.test(line)
+    ))
+    .slice(-lines)
+    .join('\n');
 }
 
 function isPidRunning(pid) {
@@ -120,6 +76,7 @@ function serviceInfo() {
     results: tail('resultados_programados.tsv', 80),
     sentLog: tail('envios_programados_log.tsv', 80),
     autoLog: tail('auto_programados.log', 80),
+    settings: readSettings(),
   };
 }
 
@@ -135,7 +92,23 @@ function startServiceInBackground() {
 
 app.get('/api/reminders', (req, res) => {
   try {
-    res.json(readWorkbook());
+    res.json(readWorkbookLike());
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/settings', (req, res) => {
+  try {
+    res.json(readSettings());
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/settings', (req, res) => {
+  try {
+    res.json({ ok: true, settings: writeSettings(req.body || {}) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -143,31 +116,7 @@ app.get('/api/reminders', (req, res) => {
 
 app.post('/api/reminders', (req, res) => {
   try {
-    if (!fs.existsSync(RUNTIME)) fs.mkdirSync(RUNTIME, { recursive: true });
-    const jsonPath = path.join(RUNTIME, `web_create_${Date.now()}.json`);
-    fs.writeFileSync(jsonPath, JSON.stringify(req.body || {}, null, 2), 'utf8');
-
-    const result = spawnSync('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      CREATE_SCRIPT,
-      '-JsonPath',
-      jsonPath,
-    ], { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 120000 });
-
-    try { fs.unlinkSync(jsonPath); } catch {}
-
-    if (result.status !== 0) {
-      return res.status(500).json({
-        error: 'No se pudo agregar el recordatorio en Excel.',
-        stdout: result.stdout,
-        stderr: result.stderr,
-      });
-    }
-
-    res.json({ ok: true, stdout: result.stdout, workbook: readWorkbook() });
+    res.json({ ok: true, workbook: createReminder(req.body || {}) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -176,36 +125,10 @@ app.post('/api/reminders', (req, res) => {
 app.patch('/api/reminders/:row', (req, res) => {
   try {
     const row = Number(req.params.row);
-    if (!Number.isInteger(row) || row < 5) {
-      return res.status(400).json({ error: 'Fila invalida.' });
+    if (!Number.isInteger(row) || row < 1) {
+      return res.status(400).json({ error: 'Id de recordatorio invalido.' });
     }
-
-    if (!fs.existsSync(RUNTIME)) fs.mkdirSync(RUNTIME, { recursive: true });
-    const payload = { row, ...req.body };
-    const jsonPath = path.join(RUNTIME, `web_update_${Date.now()}_${row}.json`);
-    fs.writeFileSync(jsonPath, JSON.stringify(payload, null, 2), 'utf8');
-
-    const result = spawnSync('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      UPDATE_SCRIPT,
-      '-JsonPath',
-      jsonPath,
-    ], { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 120000 });
-
-    try { fs.unlinkSync(jsonPath); } catch {}
-
-    if (result.status !== 0) {
-      return res.status(500).json({
-        error: 'No se pudo actualizar Excel.',
-        stdout: result.stdout,
-        stderr: result.stderr,
-      });
-    }
-
-    res.json({ ok: true, workbook: readWorkbook() });
+    res.json({ ok: true, workbook: updateReminder(row, req.body || {}) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -214,29 +137,19 @@ app.patch('/api/reminders/:row', (req, res) => {
 app.delete('/api/reminders/:row', (req, res) => {
   try {
     const row = Number(req.params.row);
-    if (!Number.isInteger(row) || row < 5) {
-      return res.status(400).json({ error: 'Fila invalida.' });
+    if (!Number.isInteger(row) || row < 1) {
+      return res.status(400).json({ error: 'Id de recordatorio invalido.' });
     }
+    res.json({ ok: true, workbook: deleteReminder(row) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-    const result = spawnSync('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      DELETE_SCRIPT,
-      '-Row',
-      String(row),
-    ], { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 120000 });
-
-    if (result.status !== 0) {
-      return res.status(500).json({
-        error: 'No se pudo eliminar la fila en Excel.',
-        stdout: result.stdout,
-        stderr: result.stderr,
-      });
-    }
-
-    res.json({ ok: true, workbook: readWorkbook() });
+app.post('/api/reminders/bulk-delete', (req, res) => {
+  try {
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    res.json({ ok: true, workbook: deleteReminders(rows) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -246,26 +159,7 @@ app.delete('/api/categories/:category', (req, res) => {
   try {
     const category = decodeURIComponent(req.params.category || '').trim();
     if (!category) return res.status(400).json({ error: 'Categoria invalida.' });
-
-    const result = spawnSync('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      DELETE_CATEGORY_SCRIPT,
-      '-Category',
-      category,
-    ], { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 120000 });
-
-    if (result.status !== 0) {
-      return res.status(500).json({
-        error: 'No se pudo eliminar la categoria en Excel.',
-        stdout: result.stdout,
-        stderr: result.stderr,
-      });
-    }
-
-    res.json({ ok: true, stdout: result.stdout, workbook: readWorkbook() });
+    res.json({ ok: true, workbook: deleteCategory(category) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -275,26 +169,7 @@ app.delete('/api/houses/:house', (req, res) => {
   try {
     const house = decodeURIComponent(req.params.house || '').trim();
     if (!house) return res.status(400).json({ error: 'Casa / grupo invalido.' });
-
-    const result = spawnSync('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      DELETE_HOUSE_SCRIPT,
-      '-House',
-      house,
-    ], { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 120000 });
-
-    if (result.status !== 0) {
-      return res.status(500).json({
-        error: 'No se pudo eliminar la casa / grupo en Excel.',
-        stdout: result.stdout,
-        stderr: result.stderr,
-      });
-    }
-
-    res.json({ ok: true, stdout: result.stdout, workbook: readWorkbook() });
+    res.json({ ok: true, workbook: deleteHouse(house) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -376,5 +251,5 @@ app.post('/api/service/restart', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`ACME Reminder Web UI running at http://localhost:${PORT}`);
+  console.log(`Confort Place Reminder Web UI running at http://localhost:${PORT}`);
 });

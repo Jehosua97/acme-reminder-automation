@@ -1,42 +1,32 @@
 ﻿'use strict';
 
 /**
- * EnvÃ­o de recordatorios desde RecordatoriosWhatsApp_Programados.xlsx.
+ * Envio de recordatorios programados.
  *
  * Modo manual:
- *   node enviar_programados.js "RecordatoriosWhatsApp_Programados.xlsx"
+ *   node enviar_programados.js
  *   EnvÃ­a filas donde "Enviar manual" = SI.
  *
  * Modo automÃ¡tico:
- *   node enviar_programados.js "RecordatoriosWhatsApp_Programados.xlsx" --auto
+ *   node enviar_programados.js --auto
  *   EnvÃ­a filas donde "Activo" = SI y ProgramaciÃ³n/Hora coinciden con el horario actual.
  *
- * Este script no edita Excel directamente. Escribe:
+ * Este script actualiza el registro local de recordatorios y escribe:
  *   estado_programados.txt
  *   resultados_programados.tsv
  */
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
-const XLSX = require('xlsx');
 const qrcode = require('qrcode-terminal');
 const { Client, LocalAuth } = require('whatsapp-web.js');
+const { rowsForSender, applySendResults } = require('./data_store');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const ARGUMENTOS = process.argv.slice(2);
 const MODO_AUTO = ARGUMENTOS.includes('--auto');
 const MODO_SERVICIO = ARGUMENTOS.includes('--service');
 const MODO_HEADLESS = MODO_AUTO || MODO_SERVICIO || ARGUMENTOS.includes('--headless');
-const RUTA_EXCEL_ARG = ARGUMENTOS.find((arg) => !arg.startsWith('--'));
-
-const RUTA_EXCEL_PREDETERMINADA = path.join(
-  PROJECT_ROOT,
-  'workbooks',
-  'RecordatoriosWhatsApp_Programados.xlsx'
-);
-
-const RUTA_EXCEL = path.resolve(RUTA_EXCEL_ARG || RUTA_EXCEL_PREDETERMINADA);
 const RUTA_RUNTIME = path.join(PROJECT_ROOT, 'runtime');
 if (!fs.existsSync(RUTA_RUNTIME)) fs.mkdirSync(RUTA_RUNTIME, { recursive: true });
 const RUTA_ESTADO = path.join(RUTA_RUNTIME, 'estado_programados.txt');
@@ -46,13 +36,15 @@ const RUTA_RESULTADOS_TEMPORAL = `${RUTA_RESULTADOS}.tmp`;
 const RUTA_LOG = path.join(RUTA_RUNTIME, 'envios_programados_log.tsv');
 const RUTA_PAUSA = path.join(RUTA_RUNTIME, 'sistema_pausado.flag');
 const RUTA_SESION = path.join(PROJECT_ROOT, '.wwebjs_auth');
-const RUTA_ACTUALIZADOR_EXCEL = path.join(__dirname, 'ActualizarExcelDesdeResultados.ps1');
 
 const ACK_MINIMO_CONFIRMADO = 1;
 const TIEMPO_MAXIMO_CONFIRMACION_MS = 90000;
 const PUPPETEER_PROTOCOL_TIMEOUT_MS = 300000;
 const PUPPETEER_DEFAULT_TIMEOUT_MS = 180000;
 const TIEMPO_MAXIMO_INICIALIZACION_MS = 120000;
+const CODIGO_REINICIO_WHATSAPP = 75;
+const WWEB_VERSION = process.env.WWEB_VERSION || '2.3000.1043159177-alpha';
+const WWEB_REMOTE_CACHE = 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html';
 const INTERVALO_SERVICIO_MS = Number(process.env.INTERVALO_SERVICIO_MS || 60000);
 // Ventana de tolerancia para envios automaticos.
 // En testing se usa 3 minutos con una tarea frecuente.
@@ -103,6 +95,24 @@ function limpiarTsv(valor) {
 
 function esperar(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function errorReiniciarWhatsapp(mensaje, causa) {
+  const error = new Error(mensaje);
+  error.reiniciarWhatsapp = true;
+  if (causa) error.cause = causa;
+  return error;
+}
+
+function mensajeError(error) {
+  if (!error) return 'Error desconocido';
+  if (error.stack) return error.stack;
+  if (error.message) return error.message;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
 }
 
 function demoraAleatoria() {
@@ -312,36 +322,11 @@ function escribirResultados() {
   fs.renameSync(RUTA_RESULTADOS_TEMPORAL, RUTA_RESULTADOS);
 }
 
-function actualizarExcelDesdeResultados() {
-  if (!fs.existsSync(RUTA_ACTUALIZADOR_EXCEL)) {
-    console.log('Aviso: no existe ActualizarExcelDesdeResultados.ps1.');
-    return;
-  }
-
-  const resultado = spawnSync(
-    'powershell.exe',
-    [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      RUTA_ACTUALIZADOR_EXCEL,
-    ],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: 'utf8',
-      timeout: 120000,
-    }
-  );
-
-  if (resultado.stdout && resultado.stdout.trim()) {
-    console.log(`Actualizador Excel OUT: ${resultado.stdout.trim()}`);
-  }
-  if (resultado.stderr && resultado.stderr.trim()) {
-    console.error(`Actualizador Excel ERR: ${resultado.stderr.trim()}`);
-  }
-  if (resultado.status !== 0) {
-    console.error(`Actualizador Excel exit code: ${resultado.status}`);
+function actualizarDataStoreDesdeResultados() {
+  try {
+    applySendResults(resultados);
+  } catch (error) {
+    console.error(`No se pudo actualizar el registro local de recordatorios: ${error.message}`);
   }
 }
 
@@ -354,6 +339,7 @@ async function finalizar(ok, resumen, codigo = ok ? 0 : 1) {
   try {
     escribirEstado(ok, resumen);
     escribirResultados();
+    actualizarDataStoreDesdeResultados();
   } catch (error) {
     console.error('No se pudo escribir estado/resultados:', error.message);
     codigo = 1;
@@ -370,10 +356,15 @@ async function finalizar(ok, resumen, codigo = ok ? 0 : 1) {
 
 function esperarConfirmacionMensaje(mensaje) {
   return new Promise((resolve) => {
+    if (!mensaje) {
+      resolve(ACK_MINIMO_CONFIRMADO);
+      return;
+    }
+
     const idMensaje = mensaje.id && mensaje.id._serialized;
 
     if (!idMensaje || mensaje.ack >= ACK_MINIMO_CONFIRMADO) {
-      resolve(mensaje.ack);
+      resolve(typeof mensaje.ack === 'number' ? mensaje.ack : ACK_MINIMO_CONFIRMADO);
       return;
     }
 
@@ -400,77 +391,48 @@ function esperarConfirmacionMensaje(mensaje) {
   });
 }
 
-function leerFilasExcel() {
-  if (!fs.existsSync(RUTA_EXCEL)) {
-    throw new Error(`No existe el archivo Excel: ${RUTA_EXCEL}`);
+async function obtenerGruposConRecuperacion() {
+  try {
+    return await obtenerGruposBasicos();
+  } catch (primerError) {
+    console.error(`Aviso: lectura de grupos fallo. Reintentando en 10s: ${mensajeError(primerError)}`);
+    await esperar(10000);
+    try {
+      return await obtenerGruposBasicos();
+    } catch (segundoError) {
+      throw errorReiniciarWhatsapp(
+        `No se pudieron obtener los grupos despues de reintentar: ${mensajeError(segundoError)}`,
+        segundoError
+      );
+    }
   }
+}
 
-  const libro = XLSX.readFile(RUTA_EXCEL, { cellDates: false });
-  const nombreHoja = 'Recordatorios Programados';
-  const hoja = libro.Sheets[nombreHoja];
-
-  if (!hoja) {
-    throw new Error(`No se encontro la hoja "${nombreHoja}".`);
-  }
-
-  const filas = XLSX.utils.sheet_to_json(hoja, {
-    header: 1,
-    defval: '',
-    raw: false,
-    blankrows: true,
+async function obtenerGruposBasicos() {
+  const grupos = await client.pupPage.evaluate(() => {
+    const chats = window.require('WAWebCollections').Chat.getModelsArray();
+    return chats
+      .map((chat) => {
+        const id = chat.id?._serialized || chat.id?.toString?.() || '';
+        const name = chat.name || chat.formattedTitle || '';
+        return {
+          id,
+          name,
+          isGroup: id.endsWith('@g.us'),
+        };
+      })
+      .filter((chat) => chat.id && chat.name && chat.isGroup);
   });
 
-  const indiceEncabezado = filas.findIndex((fila) => {
-    const h = fila.map((celda) => normalizar(celda));
-    const colGrupo = h.findIndex(
-      (x) => x.includes('GRUPO') || x.includes('CASA')
-    );
-    const colManual = h.findIndex((x) => x.includes('ENVIAR MANUAL'));
-    const colMensaje = h.findIndex((x) => x.includes('MENSAJE'));
-    return colGrupo !== -1 && colManual !== -1 && colMensaje !== -1;
-  });
+  return grupos;
+}
 
-  if (indiceEncabezado === -1) {
-    throw new Error(
-      'No se encontraron encabezados Casa/Grupo, Enviar manual y Mensaje.'
-    );
-  }
-
-  const h = filas[indiceEncabezado].map((celda) => normalizar(celda));
-  const colGrupo = h.findIndex((x) => x.includes('GRUPO') || x.includes('CASA'));
-  const colCategoria = h.findIndex((x) => x.includes('CATEGORIA'));
-  const colProgramacion = h.findIndex((x) => x.includes('PROGRAMACION'));
-  const colHora = h.findIndex((x) => x.includes('HORA'));
-  const colActivo = h.findIndex((x) => x.includes('ACTIVO'));
-  const colManual = h.findIndex((x) => x.includes('ENVIAR MANUAL'));
-  const colProximo = h.findIndex((x) => x.includes('PROXIMO ENVIO'));
-  const colMensaje = h.findIndex((x) => x.includes('MENSAJE'));
-
-  return filas
-    .slice(indiceEncabezado + 1)
-    .map((fila, i) => ({
-      hoja: nombreHoja,
-      numeroFila: indiceEncabezado + i + 2,
-      grupo: texto(fila[colGrupo]).trim(),
-      categoria: colCategoria === -1 ? '' : texto(fila[colCategoria]).trim(),
-      programacion:
-        colProgramacion === -1 ? '' : texto(fila[colProgramacion]).trim(),
-      hora: colHora === -1 ? '' : texto(fila[colHora]).trim(),
-      activo: colActivo === -1 ? '' : texto(fila[colActivo]).trim(),
-      enviarManual: texto(fila[colManual]).trim(),
-      proximoEnvio: colProximo === -1 ? '' : texto(fila[colProximo]).trim(),
-      mensaje: texto(fila[colMensaje]).trim(),
-    }))
-    .filter(
-      (fila) =>
-        fila.grupo &&
-        !fila.grupo.startsWith('CASA / GRUPO:') &&
-        fila.mensaje
-    );
+function leerFilasDataStore() {
+  return rowsForSender();
 }
 
 function seleccionarFilas() {
-  const filas = leerFilasExcel();
+  const filas = leerFilasDataStore();
 
   if (!MODO_AUTO && !MODO_SERVICIO) {
     return filas.filter((fila) => esSi(fila.enviarManual));
@@ -501,7 +463,7 @@ async function procesarEnvios() {
   try {
     filas = filasPreseleccionadas || seleccionarFilas();
   } catch (error) {
-    await finalizar(false, `No se pudo leer Excel: ${error.message}`);
+    await finalizar(false, `No se pudo leer data store: ${error.message}`);
     return;
   }
 
@@ -520,16 +482,12 @@ async function procesarEnvios() {
 
 async function procesarFilas(filas) {
   console.log(`Modo: ${MODO_SERVICIO ? 'SERVICIO' : MODO_AUTO ? 'AUTOMÃTICO' : 'MANUAL'}`);
-  console.log(`Archivo: ${RUTA_EXCEL}`);
+  console.log('Sistema de recordatorios: Confort Place');
   console.log(`Filas a enviar: ${filas.length}`);
-  console.log('Cargando chats de WhatsApp...');
+  console.log('Cargando grupos de WhatsApp...');
 
-  let chats;
-  try {
-    chats = await client.getChats();
-  } catch (error) {
-    throw new Error(`No se pudieron obtener los chats: ${error.message}`);
-  }
+  const grupos = await obtenerGruposConRecuperacion();
+  console.log(`Grupos disponibles: ${grupos.length}`);
 
   let enviados = 0;
   let errores = 0;
@@ -538,9 +496,7 @@ async function procesarFilas(filas) {
     const fila = filas[i];
     const ocurrencia = fila.ocurrencia ? fila.ocurrencia.clave : '';
 
-    const coincidencias = chats.filter(
-      (chat) => chat.isGroup && chat.name === fila.grupo
-    );
+    const coincidencias = grupos.filter((chat) => chat.name === fila.grupo);
 
     if (coincidencias.length === 0) {
       errores += 1;
@@ -574,7 +530,7 @@ async function procesarFilas(filas) {
     }
 
     try {
-      const enviado = await coincidencias[0].sendMessage(fila.mensaje);
+      const enviado = await client.sendMessage(coincidencias[0].id, fila.mensaje);
       const ack = await esperarConfirmacionMensaje(enviado);
 
       if (ack >= ACK_MINIMO_CONFIRMADO) {
@@ -666,12 +622,16 @@ async function ejecutarCicloServicio() {
     console.log(resumen);
     escribirEstado(resultado.errores === 0, resumen);
     escribirResultados();
-    actualizarExcelDesdeResultados();
+    actualizarDataStoreDesdeResultados();
   } catch (error) {
     const resumen = `Servicio: error en ciclo: ${error.message}`;
     console.error(resumen);
     escribirEstado(false, resumen);
     escribirResultados();
+    if (error.reiniciarWhatsapp) {
+      console.error('Servicio: WhatsApp Web parece inestable. Se reiniciara el cliente automaticamente.');
+      setTimeout(() => process.exit(CODIGO_REINICIO_WHATSAPP), 500);
+    }
   } finally {
     cicloServicioEnCurso = false;
   }
@@ -695,7 +655,7 @@ if (!MODO_SERVICIO) try {
     process.exit(0);
   }
 } catch (error) {
-  const mensaje = `No se pudo leer Excel: ${error.message}`;
+  const mensaje = `No se pudo leer data store: ${error.message}`;
   console.error(mensaje);
   escribirEstado(false, mensaje);
   escribirResultados();
@@ -707,8 +667,15 @@ client = new Client({
     clientId: 'recordatorios-excel',
     dataPath: RUTA_SESION,
   }),
+  webVersion: WWEB_VERSION,
+  webVersionCache: {
+    type: 'remote',
+    remotePath: WWEB_REMOTE_CACHE,
+    strict: true,
+  },
   puppeteer: {
     headless: MODO_HEADLESS,
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     protocolTimeout: PUPPETEER_PROTOCOL_TIMEOUT_MS,
     defaultViewport: null,
     args: [
@@ -761,22 +728,27 @@ client.on('auth_failure', (mensaje) => {
 });
 
 client.on('disconnected', (razon) => {
-  finalizar(false, `WhatsApp se desconectÃ³: ${razon}`);
+  finalizar(
+    false,
+    `WhatsApp se desconectÃ³: ${razon}`,
+    MODO_SERVICIO ? CODIGO_REINICIO_WHATSAPP : 1
+  );
 });
 
 process.on('uncaughtException', (error) => {
-  finalizar(false, `Error no controlado: ${error.message}`);
+  finalizar(false, `Error no controlado: ${mensajeError(error)}`);
 });
 
 process.on('unhandledRejection', (error) => {
-  const mensaje = error && error.message ? error.message : String(error);
+  const mensaje = mensajeError(error);
   finalizar(false, `Promesa rechazada: ${mensaje}`);
 });
 
 temporizadorInicializacion = setTimeout(() => {
   finalizar(
     false,
-    `WhatsApp Web no estuvo listo en ${TIEMPO_MAXIMO_INICIALIZACION_MS / 1000}s.`
+    `WhatsApp Web no estuvo listo en ${TIEMPO_MAXIMO_INICIALIZACION_MS / 1000}s.`,
+    MODO_SERVICIO ? CODIGO_REINICIO_WHATSAPP : 1
   );
 }, TIEMPO_MAXIMO_INICIALIZACION_MS);
 
