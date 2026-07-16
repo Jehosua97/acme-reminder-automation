@@ -45,11 +45,38 @@ $ventanaDefault = if ($settings -and $settings.sendWindowMinutes) { [string]$set
 $env:INTERVALO_SERVICIO_MS = if ($env:INTERVALO_SERVICIO_MS) { $env:INTERVALO_SERVICIO_MS } else { $intervaloDefault }
 $env:VENTANA_AUTO_MINUTOS = if ($env:VENTANA_AUTO_MINUTOS) { $env:VENTANA_AUTO_MINUTOS } else { $ventanaDefault }
 
+$chromeProyecto = Get-ChildItem -LiteralPath (Join-Path $Proyecto 'tools\puppeteer') -Recurse -Filter chrome.exe -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -match '\\chrome-win64\\chrome\.exe$' } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -ExpandProperty FullName -First 1
+
+if ($chromeProyecto) {
+    $env:PUPPETEER_EXECUTABLE_PATH = $chromeProyecto
+    Escribir-Log "Usando Chrome dedicado del proyecto para Puppeteer: $env:PUPPETEER_EXECUTABLE_PATH"
+} elseif (-not $env:PUPPETEER_EXECUTABLE_PATH) {
+    $navegadores = @(
+        "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+        "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+        "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe",
+        "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
+        "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
+        "$env:LOCALAPPDATA\Microsoft\Edge\Application\msedge.exe"
+    )
+    $navegador = $navegadores | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if ($navegador) {
+        $env:PUPPETEER_EXECUTABLE_PATH = $navegador
+        Escribir-Log "Usando navegador para Puppeteer: $env:PUPPETEER_EXECUTABLE_PATH"
+    } else {
+        Escribir-Log 'No se encontro Chrome/Edge instalado para Puppeteer.'
+    }
+}
+
 Escribir-Log "Iniciando servicio permanente de recordatorios. Intervalo=$env:INTERVALO_SERVICIO_MS ms Ventana=$env:VENTANA_AUTO_MINUTOS min"
 
 $CodigoReinicioWhatsApp = 75
 $reiniciosConsecutivos = 0
 $TimeoutArranqueSinSalidaSegundos = 180
+$ReinicioMaxSegundos = 300
 
 while ($true) {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -113,10 +140,14 @@ while ($true) {
         $exitCode = if ($reinicioForzadoPorArranque) { $CodigoReinicioWhatsApp } else { $proc.ExitCode }
         Escribir-Log "Servicio termino con exit code $exitCode."
 
-        if ($exitCode -eq $CodigoReinicioWhatsApp) {
+        if ($exitCode -ne 0) {
             $reiniciosConsecutivos += 1
-            $espera = [Math]::Min(60, 8 * $reiniciosConsecutivos)
-            Escribir-Log "Reinicio automatico solicitado por WhatsApp Web. Reintentando en $espera segundos."
+            $espera = [Math]::Min($ReinicioMaxSegundos, 10 * [Math]::Pow(2, [Math]::Min($reiniciosConsecutivos - 1, 5)))
+            if ($exitCode -eq $CodigoReinicioWhatsApp) {
+                Escribir-Log "Reinicio automatico solicitado por WhatsApp Web. Reintentando en $espera segundos."
+            } else {
+                Escribir-Log "Node termino con error exit code $exitCode. Reintentando en $espera segundos para tolerar fallas temporales de red/arranque."
+            }
             Start-Sleep -Seconds $espera
             continue
         }

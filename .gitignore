@@ -3,6 +3,8 @@ node_modules/
 .wwebjs_cache/
 runtime/
 data/reminders.json
+data/backups/
+tools/
 
 # Private/local operational data
 DetallesCelular.txt

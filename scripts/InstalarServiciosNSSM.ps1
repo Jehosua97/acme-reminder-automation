@@ -27,6 +27,14 @@ function Get-NodePath {
 
 function Get-PuppeteerChromePath {
     $candidates = @()
+
+    $projectCache = Join-Path $ProjectRoot 'tools\puppeteer'
+    if (Test-Path -LiteralPath $projectCache) {
+        $candidates += Get-ChildItem -LiteralPath $projectCache -Recurse -Filter chrome.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\chrome-win64\\chrome\.exe$' } |
+            Sort-Object LastWriteTime -Descending
+    }
+
     $userCache = Join-Path $env:USERPROFILE '.cache\puppeteer\chrome\win64'
     if (Test-Path -LiteralPath $userCache) {
         $candidates += Get-ChildItem -LiteralPath $userCache -Recurse -Filter chrome.exe -ErrorAction SilentlyContinue |
@@ -36,7 +44,9 @@ function Get-PuppeteerChromePath {
 
     $common = @(
         "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
-        "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe"
+        "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+        "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
+        "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
     )
     foreach ($path in $common) {
         if ($path -and (Test-Path -LiteralPath $path)) {

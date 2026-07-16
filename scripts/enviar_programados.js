@@ -36,6 +36,7 @@ const RUTA_RESULTADOS_TEMPORAL = `${RUTA_RESULTADOS}.tmp`;
 const RUTA_LOG = path.join(RUTA_RUNTIME, 'envios_programados_log.tsv');
 const RUTA_PAUSA = path.join(RUTA_RUNTIME, 'sistema_pausado.flag');
 const RUTA_SESION = path.join(PROJECT_ROOT, '.wwebjs_auth');
+const RUTA_WWEB_CACHE = path.join(PROJECT_ROOT, '.wwebjs_cache');
 
 const ACK_MINIMO_CONFIRMADO = 1;
 const TIEMPO_MAXIMO_CONFIRMACION_MS = 90000;
@@ -45,6 +46,7 @@ const TIEMPO_MAXIMO_INICIALIZACION_MS = 120000;
 const CODIGO_REINICIO_WHATSAPP = 75;
 const WWEB_VERSION = process.env.WWEB_VERSION || '2.3000.1043159177-alpha';
 const WWEB_REMOTE_CACHE = 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html';
+const WWEB_LOCAL_CACHE_FILE = path.join(RUTA_WWEB_CACHE, `${WWEB_VERSION}.html`);
 const INTERVALO_SERVICIO_MS = Number(process.env.INTERVALO_SERVICIO_MS || 60000);
 // Ventana de tolerancia para envios automaticos.
 // En testing se usa 3 minutos con una tarea frecuente.
@@ -668,11 +670,17 @@ client = new Client({
     dataPath: RUTA_SESION,
   }),
   webVersion: WWEB_VERSION,
-  webVersionCache: {
-    type: 'remote',
-    remotePath: WWEB_REMOTE_CACHE,
-    strict: true,
-  },
+  webVersionCache: fs.existsSync(WWEB_LOCAL_CACHE_FILE)
+    ? {
+        type: 'local',
+        path: RUTA_WWEB_CACHE,
+        strict: true,
+      }
+    : {
+        type: 'remote',
+        remotePath: WWEB_REMOTE_CACHE,
+        strict: true,
+      },
   puppeteer: {
     headless: MODO_HEADLESS,
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
@@ -684,6 +692,10 @@ client = new Client({
       '--disable-dev-shm-usage',
       '--disable-gpu',
       '--disable-extensions',
+      '--disable-crash-reporter',
+      '--disable-breakpad',
+      '--disable-features=Crashpad',
+      '--noerrdialogs',
       '--disable-background-timer-throttling',
       '--disable-backgrounding-occluded-windows',
       '--disable-renderer-backgrounding',

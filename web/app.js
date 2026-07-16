@@ -373,12 +373,29 @@ function renderReminders() {
 
 function updateBulkDeleteControls(visibleReminders = filteredReminders()) {
   const selectedCount = state.selectedRows.size;
-  const bulkButton = $('bulkDeleteBtn');
-  if (bulkButton) {
-    bulkButton.classList.toggle('hidden', selectedCount === 0);
-    bulkButton.textContent = selectedCount === 1
+  const bulkDeleteButton = $('bulkDeleteBtn');
+  const bulkActivateButton = $('bulkActivateBtn');
+  const bulkDeactivateButton = $('bulkDeactivateBtn');
+
+  if (bulkDeleteButton) {
+    bulkDeleteButton.classList.toggle('hidden', selectedCount === 0);
+    bulkDeleteButton.textContent = selectedCount === 1
       ? 'Eliminar 1 seleccionado'
       : `Eliminar ${selectedCount} seleccionados`;
+  }
+
+  if (bulkActivateButton) {
+    bulkActivateButton.classList.toggle('hidden', selectedCount === 0);
+    bulkActivateButton.textContent = selectedCount === 1
+      ? 'Activar 1 recordatorio'
+      : `Activar ${selectedCount} recordatorios`;
+  }
+
+  if (bulkDeactivateButton) {
+    bulkDeactivateButton.classList.toggle('hidden', selectedCount === 0);
+    bulkDeactivateButton.textContent = selectedCount === 1
+      ? 'Desactivar 1 recordatorio'
+      : `Desactivar ${selectedCount} recordatorios`;
   }
 
   const selectVisible = $('selectVisibleRows');
@@ -701,6 +718,38 @@ async function deleteSelectedRows() {
   }
 }
 
+async function setSelectedRowsActive(activo) {
+  const rows = [...state.selectedRows].sort((a, b) => a - b);
+  if (!rows.length) return;
+
+  const selected = rows
+    .map((row) => reminderByRow(row))
+    .filter(Boolean);
+  const accion = activo === 'SI' ? 'activar' : 'desactivar';
+  const accionPasado = activo === 'SI' ? 'activados' : 'desactivados';
+  const preview = selected
+    .slice(0, 12)
+    .map((r) => `- ${r.row}: ${r.group} [${r.category || 'Sin categorÃ­a'}]`)
+    .join('\n');
+  const extra = selected.length > 12 ? `\n... y ${selected.length - 12} mÃ¡s.` : '';
+  const ok = window.confirm(
+    `Vas a ${accion} ${rows.length} recordatorio(s):\n\n${preview}${extra}\n\nÂ¿Continuar?`
+  );
+  if (!ok) return;
+
+  const filters = captureFilters();
+  try {
+    const data = await api('/api/reminders/bulk-active', {
+      method: 'POST',
+      body: JSON.stringify({ rows, activo }),
+    });
+    updateStateFromWorkbook(data.workbook, filters);
+    toast(`${rows.length} recordatorio(s) ${accionPasado}.`);
+  } catch (error) {
+    toast(`Error actualizando seleccionados: ${error.message}`);
+  }
+}
+
 async function loadReminders() {
   if (state.refreshPaused || state.savingRows.size) return;
   const filters = captureFilters();
@@ -1001,6 +1050,8 @@ $('editModal').addEventListener('close', () => {
   state.refreshPaused = false;
 });
 $('addBtn').addEventListener('click', openAddModal);
+$('bulkActivateBtn').addEventListener('click', () => setSelectedRowsActive('SI'));
+$('bulkDeactivateBtn').addEventListener('click', () => setSelectedRowsActive('NO'));
 $('bulkDeleteBtn').addEventListener('click', deleteSelectedRows);
 $('selectVisibleRows').addEventListener('change', (event) => {
   const visibleRows = filteredReminders().map((r) => r.row);

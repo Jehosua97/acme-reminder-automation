@@ -1,6 +1,6 @@
 {
-  "mode": "debug",
-  "timeStepMinutes": 1,
-  "serviceIntervalMs": 120000,
-  "sendWindowMinutes": 3
+  "mode": "production",
+  "timeStepMinutes": 30,
+  "serviceIntervalMs": 300000,
+  "sendWindowMinutes": 10
 }

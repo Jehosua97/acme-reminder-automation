@@ -289,7 +289,7 @@ function nextOccurrences(reminder, now = new Date()) {
 
   const { h, m } = parseHora(reminder.hora);
   const results = [];
-  const toleranceMs = 3 * 60 * 1000;
+  const toleranceMs = readSettings().sendWindowMinutes * 60 * 1000;
   for (let offset = 0; offset < 180 && results.length < 4; offset += 1) {
     const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, h, m, 0, 0);
     const dayKey = DIAS[candidate.getDay()][0];
@@ -313,7 +313,7 @@ function nextMonthlyOccurrences(reminder, now = new Date()) {
 
   const { h, m } = parseHora(reminder.hora);
   const results = [];
-  const toleranceMs = 3 * 60 * 1000;
+  const toleranceMs = readSettings().sendWindowMinutes * 60 * 1000;
 
   for (let offset = 0; offset < 370 && results.length < 4; offset += 1) {
     const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, h, m, 0, 0);
@@ -338,7 +338,7 @@ function nextIntervalOccurrences(reminder, now = new Date()) {
   const { h, m } = parseHora(reminder.hora);
   const stepDays = interval.everyWeeks * 7;
   const base = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), h, m, 0, 0);
-  const toleranceMs = 3 * 60 * 1000;
+  const toleranceMs = readSettings().sendWindowMinutes * 60 * 1000;
   const dayMs = 24 * 60 * 60 * 1000;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const baseDay = new Date(base.getFullYear(), base.getMonth(), base.getDate());
@@ -461,6 +461,25 @@ function deleteReminders(ids) {
   return readWorkbookLike();
 }
 
+function updateRemindersActive(ids, activeValue) {
+  const idSet = new Set((ids || []).map(Number).filter((id) => Number.isInteger(id) && id > 0));
+  if (!idSet.size) throw new Error('No hay recordatorios seleccionados para actualizar.');
+
+  const activo = text(activeValue).trim().toUpperCase() === 'SI' ? 'SI' : 'NO';
+  const store = readStoreRaw();
+  let updated = 0;
+
+  store.reminders = store.reminders.map((r) => {
+    if (!idSet.has(r.id)) return r;
+    updated += 1;
+    return { ...r, activo };
+  });
+
+  if (!updated) throw new Error('No se encontraron recordatorios seleccionados.');
+  writeStore(store);
+  return readWorkbookLike();
+}
+
 function deleteCategory(category) {
   const store = readStoreRaw();
   store.reminders = store.reminders.map((r) => (
@@ -530,6 +549,7 @@ module.exports = {
   updateReminder,
   deleteReminder,
   deleteReminders,
+  updateRemindersActive,
   deleteCategory,
   deleteHouse,
   rowsForSender,

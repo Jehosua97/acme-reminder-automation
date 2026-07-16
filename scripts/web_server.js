@@ -12,6 +12,7 @@ const {
   updateReminder,
   deleteReminder,
   deleteReminders,
+  updateRemindersActive,
   deleteCategory,
   deleteHouse,
 } = require('./data_store');
@@ -150,6 +151,16 @@ app.post('/api/reminders/bulk-delete', (req, res) => {
   try {
     const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
     res.json({ ok: true, workbook: deleteReminders(rows) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/reminders/bulk-active', (req, res) => {
+  try {
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    const activo = req.body?.activo === 'SI' ? 'SI' : 'NO';
+    res.json({ ok: true, workbook: updateRemindersActive(rows, activo) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
