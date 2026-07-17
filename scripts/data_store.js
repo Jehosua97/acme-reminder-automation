@@ -413,13 +413,16 @@ function nextCleaningOccurrences(rotation, now = new Date()) {
 
   const { h, m } = parseHora(rotation.hora);
   const results = [];
+  let room = Number(rotation.currentRoom || 1);
+  const roomCount = Number(rotation.roomCount || 1);
   const toleranceMs = readSettings().sendWindowMinutes * 60 * 1000;
   for (let offset = 0; offset < 90 && results.length < 4; offset += 1) {
     const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, h, m, 0, 0);
     const dayKey = DIAS[candidate.getDay()][0];
     if (dayKey !== rotation.sendDay) continue;
     if (candidate.getTime() < now.getTime() - toleranceMs) continue;
-    results.push(fechaLarga(candidate));
+    results.push(`${fechaLarga(candidate)} | Habitación #${room}`);
+    room = room >= roomCount ? 1 : room + 1;
   }
   return results.join('\n') || 'Falta programacion';
 }
@@ -472,6 +475,48 @@ function toApiCleaningRotation(rotation) {
   };
 }
 
+function cleaningNotes(rotation) {
+  const parts = [
+    `Esta semana el responsable es el cuarto #${rotation.currentRoom}.`,
+    `Si necesitas ajustar, usa el lápiz y cambia "Enviar próxima ejecución desde".`,
+  ];
+  if (rotation.lastSentAt && rotation.lastSentRoom) {
+    parts.push(`Último envío: ${rotation.lastSentAt} | cuarto #${rotation.lastSentRoom}.`);
+  }
+  return parts.join('\n');
+}
+
+function toApiCleaningReminder(rotation) {
+  return {
+    row: `${CLEANING_ROW_PREFIX}${rotation.house}`,
+    group: rotation.house,
+    category: 'Limpieza rotativa',
+    scheduleType: 'cleaningRotation',
+    monthly: { ordinals: [], weekday: '' },
+    interval: { startDate: '', everyWeeks: 0 },
+    days: {
+      lun: rotation.sendDay === 'lun',
+      mar: rotation.sendDay === 'mar',
+      mie: rotation.sendDay === 'mie',
+      jue: rotation.sendDay === 'jue',
+      vie: rotation.sendDay === 'vie',
+      sab: rotation.sendDay === 'sab',
+      dom: rotation.sendDay === 'dom',
+    },
+    hora: rotation.hora,
+    activo: rotation.enabled ? 'SI' : 'NO',
+    enviarManual: 'NO',
+    estado: rotation.lastSentAt ? 'ENVIADO' : 'PENDIENTE',
+    ultimoEnvio: rotation.lastSentAt || '',
+    proximoEnvio: nextCleaningOccurrences(rotation),
+    mensaje: cleaningMessage(rotation),
+    notas: cleaningNotes(rotation),
+    filtrarCasa: rotation.house,
+    isCleaningRotation: true,
+    cleaning: toApiCleaningRotation(rotation),
+  };
+}
+
 function toApiReminder(reminder) {
   return {
     row: reminder.id,
@@ -495,9 +540,11 @@ function toApiReminder(reminder) {
 
 function readWorkbookLike() {
   const store = readStoreRaw();
-  const reminders = store.reminders
+  const regularReminders = store.reminders
     .filter((r) => r.group && r.mensaje)
     .map(toApiReminder);
+  const cleaningReminders = (store.cleaningRotations || []).map(toApiCleaningReminder);
+  const reminders = [...regularReminders, ...cleaningReminders];
   const houses = normalizeHouseList([
     ...(store.houses || []),
     ...reminders.map((r) => r.filtrarCasa || r.group),

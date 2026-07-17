@@ -20,7 +20,6 @@
 
   <nav class="tabs">
     <button class="tab active" data-view="reminders">Recordatorios</button>
-    <button class="tab" data-view="cleaning">RotaciÃ³n limpieza</button>
     <button class="tab" data-view="system">Estado del sistema</button>
   </nav>
 
@@ -264,6 +263,15 @@
         </label>
         <p class="interval-help">
           Usa este modo para reglas como basura azul/gris: eliges la primera fecha real y el sistema calcula cada cuantas semanas se repite.
+        </p>
+      </div>
+
+      <div id="cleaningRotationFields" class="interval-schedule hidden">
+        <label>Enviar prÃ³xima ejecuciÃ³n desde
+          <select id="modalCleaningCurrentRoom"></select>
+        </label>
+        <p class="interval-help">
+          Si no haces cambios, la rotaciÃ³n avanza automÃ¡ticamente despuÃ©s de cada envÃ­o confirmado.
         </p>
       </div>
 
