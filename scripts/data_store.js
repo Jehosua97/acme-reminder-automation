@@ -32,6 +32,39 @@ const CLEANING_ROW_PREFIX = 'cleaning:';
 const CLEANING_DEFAULT_DAY = 'sab';
 const CLEANING_DEFAULT_HOUR = '10:00';
 
+function defaultCleaningTemplate(language = 'both') {
+  const sun = '\u{1F31E}';
+  const english = [
+    `*${sun} Good morning everyone.*`,
+    '',
+    'As a reminder, this weekend the cleaning is assigned to room #{{room}}.',
+    'The cleaning must be done on Saturday or Sunday. If it isn\u2019t completed on those days, you\u2019ll need to do it later and you\u2019ll also be responsible again next week for not following the assigned schedule.',
+    'If you\u2019d like the Clean & Clear team to handle the cleaning, the cost is *$60 CAD*. Please confirm on Saturday so it can be scheduled for Sunday.',
+    'From now on, cleanings will no longer be done on Mondays.',
+    '',
+    'Thank you for your cooperation!',
+  ].join('\n');
+
+  const spanish = [
+    `*${sun} Buenos d\u00edas a todos.*`,
+    '',
+    'Como recordatorio, este fin de semana la limpieza le corresponde a la habitaci\u00f3n #{{room}}.',
+    'La limpieza debe realizarse *el s\u00e1bado o domingo*. Si no se hace en esos d\u00edas, deber\u00e1n realizarla despu\u00e9s y *tambi\u00e9n les tocar\u00e1 nuevamente la siguiente semana* por no respetar el horario asignado.',
+    'Si desean que el equipo de Clean & Clear realice la limpieza, el costo es de *$60 CAD*. Deber\u00e1n confirmarlo *el s\u00e1bado* para programarla el domingo.',
+    'A partir de ahora ya no se realizar\u00e1n limpiezas los lunes.',
+    '',
+    '\u00a1Gracias por su cooperaci\u00f3n!',
+  ].join('\n');
+
+  if (language === 'en') return english;
+  if (language === 'es') return spanish;
+  return `${english}\n\n-----------------------\n\n${spanish}`;
+}
+
+function hasRoomPlaceholder(value) {
+  return /\{\{\s*room\s*\}\}/i.test(text(value));
+}
+
 function text(value) {
   return value === undefined || value === null ? '' : String(value);
 }
@@ -184,6 +217,9 @@ function normalizeCleaningRotation(input = {}) {
   const sendDay = DAY_KEYS.includes(text(input.sendDay).trim())
     ? text(input.sendDay).trim()
     : CLEANING_DEFAULT_DAY;
+  const language = normalizeLanguage(input.language);
+  const messageTemplate = text(input.messageTemplate || input.mensaje || input.message).trim()
+    || defaultCleaningTemplate(language);
 
   return {
     house: text(input.house || input.group).trim(),
@@ -192,7 +228,8 @@ function normalizeCleaningRotation(input = {}) {
     currentRoom: safeCurrentRoom,
     sendDay,
     hora: normalizeHora(input.hora || CLEANING_DEFAULT_HOUR),
-    language: normalizeLanguage(input.language),
+    language,
+    messageTemplate,
     lastSentAt: text(input.lastSentAt).trim(),
     lastSentRoom: Number.isInteger(Number(input.lastSentRoom)) ? Number(input.lastSentRoom) : 0,
   };
@@ -429,33 +466,8 @@ function nextCleaningOccurrences(rotation, now = new Date()) {
 
 function cleaningMessage(rotation) {
   const room = Number(rotation.currentRoom || 1);
-  const sun = '\u{1F31E}';
-
-  const english = [
-    `*${sun} Good morning everyone.*`,
-    '',
-    `As a reminder, this weekend the cleaning is assigned to room #${room}.`,
-    'The cleaning must be done on Saturday or Sunday. If it isn\u2019t completed on those days, you\u2019ll need to do it later and you\u2019ll also be responsible again next week for not following the assigned schedule.',
-    'If you\u2019d like the Clean & Clear team to handle the cleaning, the cost is *$60 CAD*. Please confirm on Saturday so it can be scheduled for Sunday.',
-    'From now on, cleanings will no longer be done on Mondays.',
-    '',
-    'Thank you for your cooperation!',
-  ].join('\n');
-
-  const spanish = [
-    `*${sun} Buenos d\u00edas a todos.*`,
-    '',
-    `Como recordatorio, este fin de semana la limpieza le corresponde a la habitaci\u00f3n #${room}.`,
-    'La limpieza debe realizarse *el s\u00e1bado o domingo*. Si no se hace en esos d\u00edas, deber\u00e1n realizarla despu\u00e9s y *tambi\u00e9n les tocar\u00e1 nuevamente la siguiente semana* por no respetar el horario asignado.',
-    'Si desean que el equipo de Clean & Clear realice la limpieza, el costo es de *$60 CAD*. Deber\u00e1n confirmarlo *el s\u00e1bado* para programarla el domingo.',
-    'A partir de ahora ya no se realizar\u00e1n limpiezas los lunes.',
-    '',
-    '\u00a1Gracias por su cooperaci\u00f3n!',
-  ].join('\n');
-
-  if (rotation.language === 'en') return english;
-  if (rotation.language === 'es') return spanish;
-  return `${english}\n\n-----------------------\n\n${spanish}`;
+  const template = text(rotation.messageTemplate).trim() || defaultCleaningTemplate(rotation.language);
+  return template.replace(/\{\{\s*room\s*\}\}/gi, String(room));
 }
 
 function toApiCleaningRotation(rotation) {
@@ -468,6 +480,7 @@ function toApiCleaningRotation(rotation) {
     sendDay: rotation.sendDay,
     hora: rotation.hora,
     language: rotation.language,
+    messageTemplate: rotation.messageTemplate,
     proximoEnvio: nextCleaningOccurrences(rotation),
     lastSentAt: rotation.lastSentAt,
     lastSentRoom: rotation.lastSentRoom,
@@ -579,6 +592,22 @@ function createReminder(payload) {
   return readWorkbookLike();
 }
 
+function createCleaningRotation(payload) {
+  const store = readStoreRaw();
+  const rotation = normalizeCleaningRotation(payload);
+  if (!rotation.house) throw new Error('La casa / grupo exacto es obligatorio.');
+  if (!hasRoomPlaceholder(rotation.messageTemplate)) {
+    throw new Error('La plantilla de limpieza debe incluir el placeholder {{room}}.');
+  }
+  const exists = (store.cleaningRotations || []).some((r) => r.house === rotation.house);
+  if (exists) throw new Error(`Ya existe una rotacion de limpieza para "${rotation.house}". Usa el lapiz para editarla.`);
+
+  store.cleaningRotations = [...(store.cleaningRotations || []), rotation];
+  store.houses = normalizeHouseList([...(store.houses || []), rotation.house]);
+  writeStore(store);
+  return readWorkbookLike();
+}
+
 function updateReminder(id, payload) {
   const store = readStoreRaw();
   const reminder = store.reminders.find((r) => r.id === Number(id));
@@ -674,6 +703,9 @@ function updateCleaningRotation(house, payload) {
     house: rotation.house,
   });
   if (!merged.house) throw new Error('La casa es obligatoria.');
+  if (!hasRoomPlaceholder(merged.messageTemplate)) {
+    throw new Error('La plantilla de limpieza debe incluir el placeholder {{room}}.');
+  }
 
   store.cleaningRotations = store.cleaningRotations.map((r) => (
     r.house === house ? merged : r
@@ -759,6 +791,7 @@ module.exports = {
   readSettings,
   writeSettings,
   createReminder,
+  createCleaningRotation,
   updateReminder,
   deleteReminder,
   deleteReminders,

@@ -267,11 +267,14 @@
       </div>
 
       <div id="cleaningRotationFields" class="interval-schedule hidden">
+        <label>Número de cuartos
+          <input id="modalCleaningRoomCount" type="number" min="1" max="30" />
+        </label>
         <label>Enviar prÃ³xima ejecuciÃ³n desde
           <select id="modalCleaningCurrentRoom"></select>
         </label>
         <p class="interval-help">
-          Si no haces cambios, la rotaciÃ³n avanza automÃ¡ticamente despuÃ©s de cada envÃ­o confirmado.
+          Usa {{room}} dentro del mensaje. El sistema lo reemplaza por el cuarto responsable y avanza automÃ¡ticamente despuÃ©s de cada envÃ­o confirmado.
         </p>
       </div>
 

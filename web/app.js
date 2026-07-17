@@ -40,6 +40,43 @@ const DAY_LABELS = {
   dom: 'Domingo',
 };
 
+function normalizePlain(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function isCleaningCategory(value) {
+  const normalized = normalizePlain(value);
+  return normalized === 'limpieza rotativa' || normalized === 'liempieza rotativa';
+}
+
+function defaultCleaningTemplateUi() {
+  return [
+    '*🌞 Good morning everyone.*',
+    '',
+    'As a reminder, this weekend the cleaning is assigned to room #{{room}}.',
+    'The cleaning must be done on Saturday or Sunday. If it isn’t completed on those days, you’ll need to do it later and you’ll also be responsible again next week for not following the assigned schedule.',
+    'If you’d like the Clean & Clear team to handle the cleaning, the cost is *$60 CAD*. Please confirm on Saturday so it can be scheduled for Sunday.',
+    'From now on, cleanings will no longer be done on Mondays.',
+    '',
+    'Thank you for your cooperation!',
+    '',
+    '-----------------------',
+    '',
+    '*🌞 Buenos días a todos.*',
+    '',
+    'Como recordatorio, este fin de semana la limpieza le corresponde a la habitación #{{room}}.',
+    'La limpieza debe realizarse *el sábado o domingo*. Si no se hace en esos días, deberán realizarla después y *también les tocará nuevamente la siguiente semana* por no respetar el horario asignado.',
+    'Si desean que el equipo de Clean & Clear realice la limpieza, el costo es de *$60 CAD*. Deberán confirmarlo *el sábado* para programarla el domingo.',
+    'A partir de ahora ya no se realizarán limpiezas los lunes.',
+    '',
+    '¡Gracias por su cooperación!',
+  ].join('\n');
+}
+
 function toast(message) {
   const el = $('toast');
   el.textContent = message;
@@ -194,6 +231,7 @@ function filteredReminders() {
 function setModalCategory(value) {
   $('modalCategory').value = value || '';
   $('categoryComboLabel').textContent = value || 'Seleccionar categoría';
+  applyModalCategoryMode();
 }
 
 function setModalHouse(value) {
@@ -361,6 +399,7 @@ function selectedModalWeeklyDay() {
 function setModalCleaningRotation(cleaning = {}) {
   const roomCount = Math.max(1, Number(cleaning.roomCount || 1));
   const currentRoom = Math.max(1, Math.min(roomCount, Number(cleaning.currentRoom || 1)));
+  $('modalCleaningRoomCount').value = roomCount;
   $('modalCleaningCurrentRoom').innerHTML = Array.from({ length: roomCount }, (_, index) => {
     const room = index + 1;
     return `<option value="${room}" ${room === currentRoom ? 'selected' : ''}>Habitación #${room}</option>`;
@@ -371,6 +410,31 @@ function setModalCleaningRotation(cleaning = {}) {
   $('monthlyScheduleFields').classList.add('hidden');
   $('intervalScheduleFields').classList.add('hidden');
   $('cleaningRotationFields').classList.remove('hidden');
+}
+
+function refreshCleaningRoomOptions() {
+  const roomCount = Math.max(1, Math.min(30, Number($('modalCleaningRoomCount').value || 1)));
+  const currentRoom = Math.max(1, Math.min(roomCount, Number($('modalCleaningCurrentRoom').value || 1)));
+  $('modalCleaningRoomCount').value = roomCount;
+  $('modalCleaningCurrentRoom').innerHTML = Array.from({ length: roomCount }, (_, index) => {
+    const room = index + 1;
+    return `<option value="${room}" ${room === currentRoom ? 'selected' : ''}>Habitación #${room}</option>`;
+  }).join('');
+}
+
+function applyModalCategoryMode() {
+  if (state.modalMode !== 'add') return;
+  const cleaning = isCleaningCategory($('modalCategory').value);
+  if (cleaning) {
+    $('modalScheduleType').value = 'weekly';
+    $('modalScheduleType').disabled = true;
+    setModalCleaningRotation({ roomCount: Number($('modalCleaningRoomCount').value || 3), currentRoom: 1, sendDay: 'sab' });
+    if (!$('modalMessage').value.trim()) $('modalMessage').value = defaultCleaningTemplateUi();
+    $('modalNotes').value = 'Las notas se generan por el sistema después de enviar.';
+  } else {
+    $('modalScheduleType').disabled = false;
+    setModalScheduleType($('modalScheduleType').value || 'weekly');
+  }
 }
 
 function renderReminders() {
@@ -723,7 +787,7 @@ function openEditModal(row) {
     $('houseComboButton').disabled = true;
     $('categoryComboButton').disabled = true;
     $('modalScheduleType').disabled = true;
-    $('modalMessage').readOnly = true;
+    $('modalMessage').readOnly = false;
     setModalHouse(reminder.group || '');
     state.houseMenuOpen = false;
     renderHouseCombo();
@@ -734,7 +798,7 @@ function openEditModal(row) {
     setModalScheduleType('weekly');
     setModalCleaningRotation(reminder.cleaning || {});
     setModalActive(reminder.activo || 'NO');
-    $('modalMessage').value = reminder.mensaje || '';
+    $('modalMessage').value = reminder.cleaning?.messageTemplate || reminder.mensaje || defaultCleaningTemplateUi();
     $('modalNotes').value = reminder.notas || '';
     $('editModal').showModal();
     return;
@@ -819,9 +883,10 @@ async function saveModal() {
       enabled: $('modalActivo').checked,
       currentRoom: Number($('modalCleaningCurrentRoom').value),
       hora: $('modalHora').value,
-      roomCount: reminder.cleaning?.roomCount,
+      roomCount: Number($('modalCleaningRoomCount').value || reminder.cleaning?.roomCount || 1),
       sendDay: selectedModalWeeklyDay(),
       language: reminder.cleaning?.language || 'both',
+      messageTemplate: $('modalMessage').value,
     });
     return;
   }
@@ -835,6 +900,36 @@ async function saveModal() {
     toast('El mensaje no puede quedar vacío.');
     return;
   }
+  if (state.modalMode === 'add' && isCleaningCategory(payload.category)) {
+    if (!/\{\{\s*room\s*\}\}/i.test(payload.mensaje)) {
+      toast('El mensaje de limpieza rotativa debe incluir {{room}}.');
+      return;
+    }
+    $('editModal').close();
+    state.refreshPaused = false;
+    const filters = captureFilters();
+    try {
+      const data = await api('/api/cleaning-rotations', {
+        method: 'POST',
+        body: JSON.stringify({
+          house: payload.group,
+          enabled: payload.activo === 'SI',
+          roomCount: Number($('modalCleaningRoomCount').value || 1),
+          currentRoom: Number($('modalCleaningCurrentRoom').value || 1),
+          sendDay: selectedModalWeeklyDay(),
+          hora: payload.hora,
+          language: 'both',
+          messageTemplate: payload.mensaje,
+        }),
+      });
+      updateStateFromWorkbook(data.workbook, filters);
+      toast('Rotación de limpieza agregada.');
+    } catch (error) {
+      toast(`Error agregando rotación: ${error.message}`);
+    }
+    return;
+  }
+
   if (payload.scheduleType === 'monthly') {
     if (!payload.monthly.ordinals.length) {
       toast('Selecciona al menos una semana del mes.');
@@ -1173,6 +1268,7 @@ $('modalActivo').addEventListener('change', () => {
 $('modalScheduleType').addEventListener('change', () => {
   setModalScheduleType($('modalScheduleType').value);
 });
+$('modalCleaningRoomCount').addEventListener('input', refreshCleaningRoomOptions);
 $('weeklyScheduleFields').addEventListener('change', (event) => {
   if (state.modalMode !== 'cleaning') return;
   const changed = event.target.closest('input[type="checkbox"]');

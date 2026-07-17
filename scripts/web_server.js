@@ -9,6 +9,7 @@ const {
   readSettings,
   writeSettings,
   createReminder,
+  createCleaningRotation,
   updateReminder,
   deleteReminder,
   deleteReminders,
@@ -119,6 +120,14 @@ app.post('/api/settings', (req, res) => {
 app.post('/api/reminders', (req, res) => {
   try {
     res.json({ ok: true, workbook: createReminder(req.body || {}) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/cleaning-rotations', (req, res) => {
+  try {
+    res.json({ ok: true, workbook: createCleaningRotation(req.body || {}) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
