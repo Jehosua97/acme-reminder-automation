@@ -231,6 +231,40 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
+.reminders-table th.resizable-column {
+  position: sticky;
+  padding-right: 16px;
+}
+.column-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+.column-resizer::after {
+  content: "";
+  position: absolute;
+  top: 24%;
+  bottom: 24%;
+  left: 4px;
+  width: 2px;
+  border-radius: 999px;
+  background: #94a3b8;
+  opacity: 0.45;
+}
+.column-resizer:hover::after,
+body.resizing-column .column-resizer::after {
+  opacity: 1;
+  background: var(--blue);
+}
+body.resizing-column {
+  cursor: col-resize;
+  user-select: none;
+}
 .sort-header {
   display: inline-flex;
   align-items: center;
@@ -281,23 +315,6 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 .reminders-table tr.disabled-reminder:hover td {
   background: #e9eef5;
 }
-.reminders-table tr.cleaning-reminder td {
-  background: #f0fdfa;
-}
-.reminders-table tr.cleaning-reminder:hover td {
-  background: #ccfbf1;
-}
-.rotation-dot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  background: #0f766e;
-  color: white;
-  font-weight: 800;
-}
 .reminders-table tr.disabled-reminder .house-cell,
 .reminders-table tr.disabled-reminder .category-readonly,
 .reminders-table tr.disabled-reminder .message-preview,
@@ -324,19 +341,19 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 }
 .days-cell { min-width: 210px; }
 .date-cell {
-  min-width: 190px;
-  max-width: 230px;
+  min-width: 145px;
+  max-width: 220px;
   color: var(--muted);
   white-space: pre-wrap;
 }
 .message-preview {
-  min-width: 230px;
-  max-width: 290px;
+  min-width: 150px;
+  max-width: 245px;
   color: var(--muted);
 }
 .notes-preview {
-  min-width: 190px;
-  max-width: 260px;
+  min-width: 130px;
+  max-width: 220px;
   color: var(--muted);
   font-style: italic;
 }
@@ -346,7 +363,7 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   font-weight: 650;
 }
 .actions-cell {
-  min-width: 135px;
+  min-width: 120px;
   white-space: nowrap;
 }
 .row-save-state {

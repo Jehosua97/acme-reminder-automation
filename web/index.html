@@ -99,7 +99,7 @@
 
     <section id="cleaningView" class="view">
       <div class="hint">
-        Esta vista controla la limpieza rotativa. El sistema enviarÃ¡ el mensaje semanal con el cuarto responsable actual y, si WhatsApp confirma el envÃ­o, avanzarÃ¡ automÃ¡ticamente al siguiente cuarto.
+        Esta vista controla la limpieza rotativa. El sistema enviará el mensaje semanal con el cuarto responsable actual y, si WhatsApp confirma el envío, avanzará automáticamente al siguiente cuarto.
       </div>
 
       <div class="table-shell cleaning-shell">
@@ -109,12 +109,12 @@
               <th>Casa</th>
               <th>Cuartos</th>
               <th>Responsable actual</th>
-              <th>Siguiente automÃ¡tico</th>
-              <th>Enviar prÃ³xima ejecuciÃ³n desde</th>
+              <th>Siguiente automático</th>
+              <th>Enviar próxima ejecución desde</th>
               <th>Hora</th>
-              <th>DÃ­a</th>
+              <th>Día</th>
               <th>Idioma</th>
-              <th>PrÃ³ximo envÃ­o</th>
+              <th>Próximo envío</th>
             </tr>
           </thead>
           <tbody id="cleaningRotationGrid"></tbody>
@@ -128,7 +128,7 @@
         <button id="stopService" class="danger">Detener servicio</button>
         <button id="restartService">Reiniciar servicio</button>
         <button id="debugMode" type="button">Modo Debug</button>
-        <button id="productionMode" type="button">Modo ProducciÃ³n</button>
+        <button id="productionMode" type="button">Modo Producción</button>
         <button id="refreshStatus">Actualizar estado</button>
       </div>
 
@@ -270,11 +270,11 @@
         <label>Número de cuartos
           <input id="modalCleaningRoomCount" type="number" min="1" max="30" />
         </label>
-        <label>Enviar prÃ³xima ejecuciÃ³n desde
+        <label>Enviar próxima ejecución desde
           <select id="modalCleaningCurrentRoom"></select>
         </label>
         <p class="interval-help">
-          Usa {{room}} dentro del mensaje. El sistema lo reemplaza por el cuarto responsable y avanza automÃ¡ticamente despuÃ©s de cada envÃ­o confirmado.
+          Usa {{room}} dentro del mensaje. El sistema lo reemplaza por el cuarto responsable y avanza automáticamente después de cada envío confirmado.
         </p>
       </div>
 

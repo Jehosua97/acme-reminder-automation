@@ -14,6 +14,8 @@ const state = {
   refreshPaused: false,
   sort: { key: 'group', direction: 'asc' },
   settings: { mode: 'production', timeStepMinutes: 30 },
+  columnWidths: {},
+  lastTableAutoFitSignature: '',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -39,6 +41,22 @@ const DAY_LABELS = {
   sab: 'Sábado',
   dom: 'Domingo',
 };
+const COLUMN_WIDTHS_STORAGE_KEY = 'confortPlaceReminderColumnWidths';
+const MIN_COLUMN_WIDTH = 46;
+const AUTO_FIT_LIMITS = {
+  1: { min: 42, max: 54 },
+  2: { min: 120, max: 280 },
+  3: { min: 110, max: 220 },
+  4: { min: 120, max: 260 },
+  5: { min: 92, max: 130 },
+  6: { min: 120, max: 170 },
+  7: { min: 105, max: 150 },
+  8: { min: 145, max: 245 },
+  9: { min: 140, max: 260 },
+  10: { min: 150, max: 245 },
+  11: { min: 130, max: 220 },
+  12: { min: 120, max: 155 },
+};
 
 function normalizePlain(value) {
   return String(value ?? '')
@@ -51,6 +69,37 @@ function normalizePlain(value) {
 function isCleaningCategory(value) {
   const normalized = normalizePlain(value);
   return normalized === 'limpieza rotativa' || normalized === 'liempieza rotativa';
+}
+
+function cleaningResponsibleRoom(cleaning = {}) {
+  const roomCount = Math.max(1, Number(cleaning.roomCount || 1));
+  const savedResponsible = Number(cleaning.currentResponsibleRoom || cleaning.lastSentRoom || 0);
+  if (Number.isInteger(savedResponsible) && savedResponsible >= 1 && savedResponsible <= roomCount) {
+    return savedResponsible;
+  }
+  const nextNotificationRoom = Math.max(1, Math.min(roomCount, Number(cleaning.currentRoom || 1)));
+  return nextNotificationRoom <= 1 ? roomCount : nextNotificationRoom - 1;
+}
+
+function cleaningNotesUi(reminder, override = {}) {
+  const cleaning = reminder?.cleaning || {};
+  const responsible = cleaningResponsibleRoom(cleaning);
+  const roomCount = Math.max(1, Number(override.roomCount || cleaning.roomCount || 1));
+  const nextNotificationRoom = Math.max(1, Math.min(
+    roomCount,
+    Number(override.currentRoom || cleaning.currentRoom || 1)
+  ));
+  const lines = [
+    `Esta semana el responsable es el cuarto #${responsible}.`,
+    nextNotificationRoom === responsible
+      ? `La próxima notificación se enviará OTRA VEZ para el cuarto #${nextNotificationRoom}.`
+      : `La próxima notificación se enviará para el cuarto #${nextNotificationRoom}.`,
+    'Si necesitas ajustar, usa el lápiz y cambia "Enviar próxima ejecución desde".',
+  ];
+  if (cleaning.lastSentAt && cleaning.lastSentRoom) {
+    lines.push(`Último envío: ${cleaning.lastSentAt} | cuarto #${cleaning.lastSentRoom}.`);
+  }
+  return lines.join('\n');
 }
 
 function defaultCleaningTemplateUi() {
@@ -226,6 +275,18 @@ function filteredReminders() {
   });
 
   return sortReminders(filtered);
+}
+
+function tableAutoFitSignature(reminders) {
+  return JSON.stringify({
+    rows: reminders.map((r) => r.row),
+    houses: [...state.selectedHouses].sort(),
+    category: $('categoryFilter')?.value || '',
+    status: $('statusFilter')?.value || '',
+    active: $('activeFilter')?.value || '',
+    search: $('searchBox')?.value || '',
+    sort: state.sort,
+  });
 }
 
 function setModalCategory(value) {
@@ -420,6 +481,17 @@ function refreshCleaningRoomOptions() {
     const room = index + 1;
     return `<option value="${room}" ${room === currentRoom ? 'selected' : ''}>Habitación #${room}</option>`;
   }).join('');
+  updateModalCleaningNotes();
+}
+
+function updateModalCleaningNotes() {
+  if (state.modalMode !== 'cleaning') return;
+  const reminder = reminderByRow(state.modalRow);
+  if (!reminder?.isCleaningRotation) return;
+  $('modalNotes').value = cleaningNotesUi(reminder, {
+    roomCount: Number($('modalCleaningRoomCount').value || reminder.cleaning?.roomCount || 1),
+    currentRoom: Number($('modalCleaningCurrentRoom').value || reminder.cleaning?.currentRoom || 1),
+  });
 }
 
 function applyModalCategoryMode() {
@@ -437,7 +509,7 @@ function applyModalCategoryMode() {
   }
 }
 
-function renderReminders() {
+function renderRemindersLegacyUnused() {
   const body = $('reminderGrid');
   const reminders = filteredReminders();
   state.selectedRows = new Set([...state.selectedRows].filter((row) => state.reminders.some((r) => r.row === row)));
@@ -506,7 +578,7 @@ function updateBulkDeleteControls(visibleReminders = filteredReminders()) {
 
   const selectVisible = $('selectVisibleRows');
   if (selectVisible) {
-    const visibleRows = visibleReminders.filter((r) => !r.isCleaningRotation).map((r) => r.row);
+    const visibleRows = visibleReminders.map((r) => r.row);
     const selectedVisible = visibleRows.filter((row) => state.selectedRows.has(row));
     selectVisible.checked = visibleRows.length > 0 && selectedVisible.length === visibleRows.length;
     selectVisible.indeterminate = selectedVisible.length > 0 && selectedVisible.length < visibleRows.length;
@@ -517,37 +589,28 @@ function renderReminders() {
   const body = $('reminderGrid');
   const reminders = filteredReminders();
   state.selectedRows = new Set([...state.selectedRows].filter((row) => (
-    state.reminders.some((r) => r.row === row && !r.isCleaningRotation)
+    state.reminders.some((r) => r.row === row)
   )));
   updateBulkDeleteControls(reminders);
   renderSortIndicators();
 
   if (!reminders.length) {
-    body.innerHTML = '<tr><td colspan="12" class="empty">No hay recordatorios con esos filtros.</td></tr>';
+    body.innerHTML = '<tr><td colspan="11" class="empty">No hay recordatorios con esos filtros.</td></tr>';
     return;
   }
 
   body.innerHTML = reminders.map((r) => {
     const cleaning = Boolean(r.isCleaningRotation);
     const rowValue = escapeHtml(r.row);
-    const selectCell = cleaning
-      ? '<span class="rotation-dot" title="Rotación de limpieza">↻</span>'
-      : `<input type="checkbox" class="row-select" data-row-select value="${rowValue}" ${state.selectedRows.has(r.row) ? 'checked' : ''} />`;
-    const hourCell = cleaning
-      ? `<span class="mono">${escapeHtml(r.hora || '')} hrs</span>`
-      : `<select class="time-input" name="hora" data-autosave>${timeOptions(r.hora)}</select>`;
-    const activeCell = cleaning
-      ? `<span class="badge ${r.activo === 'SI' ? 'ENVIADO' : 'PENDIENTE'}">${r.activo === 'SI' ? 'Activo' : 'Desactivado'}</span>`
-      : activeToggle(r);
-    const deleteButton = cleaning
-      ? ''
-      : '<button type="button" class="icon-button danger-icon" title="Eliminar" data-action="delete">🗑️</button>';
+    const selectCell = `<input type="checkbox" class="row-select" data-row-select value="${rowValue}" ${state.selectedRows.has(r.row) ? 'checked' : ''} />`;
+    const hourCell = `<select class="time-input" name="hora" data-autosave>${timeOptions(r.hora)}</select>`;
+    const activeCell = activeToggle(r);
+    const notesText = cleaning ? cleaningNotesUi(r) : (r.notas || 'Sin notas');
 
     return `
       <tr data-row="${rowValue}" class="${[
         state.savingRows.has(r.row) ? 'saving' : '',
         r.activo === 'NO' ? 'disabled-reminder' : '',
-        cleaning ? 'cleaning-reminder' : '',
       ].filter(Boolean).join(' ')}">
         <td class="select-cell">${selectCell}</td>
         <td class="house-cell">${escapeHtml(r.group)}</td>
@@ -559,16 +622,20 @@ function renderReminders() {
         <td class="date-cell">${escapeHtml(r.proximoEnvio || 'Sin próximo envío')}</td>
         <td class="date-cell">${escapeHtml(r.ultimoEnvio || 'Sin envíos')}</td>
         <td class="message-preview">${escapeHtml(shortText(r.mensaje))}</td>
-        <td class="notes-preview">${escapeHtml(shortText(r.notas || 'Sin notas', 75))}</td>
+        <td class="notes-preview">${escapeHtml(shortText(notesText, 75))}</td>
         <td class="actions-cell">
-          <button type="button" class="icon-button" title="${cleaning ? 'Ajustar rotación' : 'Editar'}" data-action="edit">✏️</button>
-          ${deleteButton}
+          <button type="button" class="icon-button" title="${cleaning ? 'Ajustar rotacion' : 'Editar'}" data-action="edit">&#9999;&#65039;</button>
+          <button type="button" class="icon-button danger-icon" title="Eliminar" data-action="delete">&#128465;&#65039;</button>
           <span class="row-save-state" data-save-state>${state.savingRows.has(r.row) ? 'Guardando...' : ''}</span>
         </td>
       </tr>
     `;
   }).join('');
   updateBulkDeleteControls(reminders);
+  const autoFitSignature = tableAutoFitSignature(reminders);
+  const shouldRecalculateWidths = autoFitSignature !== state.lastTableAutoFitSignature;
+  autoFitVisibleColumns({ includeManual: shouldRecalculateWidths });
+  state.lastTableAutoFitSignature = autoFitSignature;
 }
 
 function initializeSortHeaders() {
@@ -596,6 +663,7 @@ function initializeSortHeaders() {
     });
   });
   renderSortIndicators();
+  setupResizableColumns();
 }
 
 function renderSortIndicators() {
@@ -606,6 +674,143 @@ function renderSortIndicators() {
       : '-';
     arrow.closest('.sort-header')?.classList.toggle('active-sort', state.sort.key === key);
   });
+}
+
+function loadColumnWidths() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(COLUMN_WIDTHS_STORAGE_KEY) || '{}');
+    state.columnWidths = saved && typeof saved === 'object' ? saved : {};
+  } catch {
+    state.columnWidths = {};
+  }
+}
+
+function saveColumnWidths() {
+  localStorage.setItem(COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(state.columnWidths));
+}
+
+function columnLimit(index) {
+  return AUTO_FIT_LIMITS[index] || { min: MIN_COLUMN_WIDTH, max: 260 };
+}
+
+function textForColumnMeasurement(cell) {
+  if (!cell) return '';
+  const select = cell.querySelector('select');
+  if (select) return select.options[select.selectedIndex]?.textContent || select.value || '';
+  const input = cell.querySelector('input');
+  if (input) {
+    if (input.type === 'checkbox') return '☑';
+    return input.value || '';
+  }
+  return cell.textContent || '';
+}
+
+function measureColumnText(text, font = '13px Segoe UI') {
+  if (!measureColumnText.canvas) measureColumnText.canvas = document.createElement('canvas');
+  const context = measureColumnText.canvas.getContext('2d');
+  context.font = font;
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return 0;
+  return Math.ceil(context.measureText(normalized).width);
+}
+
+function setColumnWidth(index, width) {
+  const table = document.querySelector('#remindersView .reminders-table');
+  if (!table) return;
+  const safeWidth = Math.max(MIN_COLUMN_WIDTH, Number(width || 0));
+  table.querySelectorAll(`tr > *:nth-child(${index})`).forEach((cell) => {
+    cell.style.width = `${safeWidth}px`;
+    cell.style.minWidth = `${safeWidth}px`;
+  });
+}
+
+function applyColumnWidths() {
+  const table = document.querySelector('#remindersView .reminders-table');
+  if (!table) return;
+  Object.entries(state.columnWidths).forEach(([index, width]) => {
+    const safeWidth = Math.max(MIN_COLUMN_WIDTH, Number(width || 0));
+    setColumnWidth(index, safeWidth);
+  });
+}
+
+function autoFitColumn(index, { clearManual = false } = {}) {
+  const table = document.querySelector('#remindersView .reminders-table');
+  if (!table) return;
+  if (!clearManual && state.columnWidths[index]) return;
+  if (clearManual) {
+    delete state.columnWidths[index];
+    saveColumnWidths();
+  }
+
+  const limit = columnLimit(Number(index));
+  const header = table.querySelector(`thead tr > *:nth-child(${index})`);
+  const cells = [...table.querySelectorAll(`tbody tr > *:nth-child(${index})`)];
+  const font = window.getComputedStyle(table).font || '13px Segoe UI';
+  const values = [
+    header?.innerText || '',
+    ...cells.map(textForColumnMeasurement),
+  ];
+  const widest = values.reduce((max, value) => Math.max(max, measureColumnText(value, font)), 0);
+  const width = Math.min(limit.max, Math.max(limit.min, widest + 28));
+  setColumnWidth(index, width);
+}
+
+function autoFitVisibleColumns({ includeManual = false } = {}) {
+  const table = document.querySelector('#remindersView .reminders-table');
+  if (!table) return;
+  const columnCount = table.querySelectorAll('thead th').length;
+  if (includeManual) {
+    state.columnWidths = {};
+    saveColumnWidths();
+  }
+  for (let index = 1; index <= columnCount; index += 1) {
+    autoFitColumn(index, { clearManual: includeManual });
+  }
+}
+
+function setupResizableColumns() {
+  const table = document.querySelector('#remindersView .reminders-table');
+  if (!table) return;
+  const headers = table.querySelectorAll('thead th');
+
+  headers.forEach((th, zeroIndex) => {
+    const index = zeroIndex + 1;
+    if (th.querySelector('.column-resizer')) return;
+    th.classList.add('resizable-column');
+    const handle = document.createElement('span');
+    handle.className = 'column-resizer';
+    handle.title = 'Arrastra para cambiar el ancho. Doble clic para resetear.';
+    handle.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const startX = event.clientX;
+      const startWidth = th.getBoundingClientRect().width;
+
+      const onMove = (moveEvent) => {
+        const width = Math.max(MIN_COLUMN_WIDTH, Math.round(startWidth + moveEvent.clientX - startX));
+        state.columnWidths[index] = width;
+        applyColumnWidths();
+      };
+      const onUp = () => {
+        document.body.classList.remove('resizing-column');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        saveColumnWidths();
+      };
+
+      document.body.classList.add('resizing-column');
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    handle.addEventListener('dblclick', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      autoFitColumn(index, { clearManual: true });
+    });
+    th.appendChild(handle);
+  });
+
+  applyColumnWidths();
 }
 
 function rowElement(row) {
@@ -623,6 +828,18 @@ function rowIdFromDataset(value) {
 function payloadFromRow(row) {
   const tr = rowElement(row);
   const current = reminderByRow(row);
+  if (current?.isCleaningRotation) {
+    return {
+      enabled: tr.querySelector('[name="activoToggle"]').checked,
+      currentRoom: current.cleaning?.currentRoom || 1,
+      currentResponsibleRoom: cleaningResponsibleRoom(current.cleaning),
+      hora: tr.querySelector('[name="hora"]').value,
+      roomCount: current.cleaning?.roomCount || 1,
+      sendDay: current.cleaning?.sendDay || 'sab',
+      language: current.cleaning?.language || 'both',
+      messageTemplate: current.cleaning?.messageTemplate || current.mensaje,
+    };
+  }
   const scheduleType = current.scheduleType || 'weekly';
   const isWeekly = scheduleType === 'weekly';
   return {
@@ -749,7 +966,11 @@ async function saveRow(row, payload, { quiet = false } = {}) {
   }
 
   try {
-    const data = await api(`/api/reminders/${row}`, {
+    const current = reminderByRow(row);
+    const endpoint = current?.isCleaningRotation
+      ? `/api/cleaning-rotations/${encodeURIComponent(current.group)}`
+      : `/api/reminders/${row}`;
+    const data = await api(endpoint, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
@@ -783,7 +1004,7 @@ function openEditModal(row) {
     state.modalRow = row;
     state.refreshPaused = true;
     $('modalTitle').textContent = `Ajustar rotación de limpieza`;
-    $('modalSubtitle').textContent = `${reminder.group} · responsable actual cuarto #${reminder.cleaning?.currentRoom || 1}`;
+    $('modalSubtitle').textContent = `${reminder.group} · responsable esta semana cuarto #${cleaningResponsibleRoom(reminder.cleaning)}`;
     $('houseComboButton').disabled = true;
     $('categoryComboButton').disabled = true;
     $('modalScheduleType').disabled = true;
@@ -799,7 +1020,7 @@ function openEditModal(row) {
     setModalCleaningRotation(reminder.cleaning || {});
     setModalActive(reminder.activo || 'NO');
     $('modalMessage').value = reminder.cleaning?.messageTemplate || reminder.mensaje || defaultCleaningTemplateUi();
-    $('modalNotes').value = reminder.notas || '';
+    $('modalNotes').value = cleaningNotesUi(reminder);
     $('editModal').showModal();
     return;
   }
@@ -884,6 +1105,7 @@ async function saveModal() {
       currentRoom: Number($('modalCleaningCurrentRoom').value),
       hora: $('modalHora').value,
       roomCount: Number($('modalCleaningRoomCount').value || reminder.cleaning?.roomCount || 1),
+      currentResponsibleRoom: cleaningResponsibleRoom(reminder.cleaning),
       sendDay: selectedModalWeeklyDay(),
       language: reminder.cleaning?.language || 'both',
       messageTemplate: $('modalMessage').value,
@@ -916,6 +1138,10 @@ async function saveModal() {
           enabled: payload.activo === 'SI',
           roomCount: Number($('modalCleaningRoomCount').value || 1),
           currentRoom: Number($('modalCleaningCurrentRoom').value || 1),
+          currentResponsibleRoom: cleaningResponsibleRoom({
+            roomCount: Number($('modalCleaningRoomCount').value || 1),
+            currentRoom: Number($('modalCleaningCurrentRoom').value || 1),
+          }),
           sendDay: selectedModalWeeklyDay(),
           hora: payload.hora,
           language: 'both',
@@ -1019,6 +1245,26 @@ async function deleteSelectedRows() {
   }
 }
 
+async function deleteRow(row) {
+  const reminder = reminderByRow(row);
+  if (!reminder) return;
+  const filters = captureFilters();
+  const label = reminder.isCleaningRotation ? 'rotación de limpieza' : `recordatorio ${row}`;
+  const ok = window.confirm(`Vas a eliminar ${label}:\n\n${reminder.group}\n${reminder.category}\n\nEsta acción no se puede deshacer automáticamente. ¿Continuar?`);
+  if (!ok) return;
+
+  try {
+    const endpoint = reminder.isCleaningRotation
+      ? `/api/cleaning-rotations/${encodeURIComponent(reminder.group)}`
+      : `/api/reminders/${row}`;
+    const data = await api(endpoint, { method: 'DELETE' });
+    updateStateFromWorkbook(data.workbook, filters);
+    toast(reminder.isCleaningRotation ? 'Rotación eliminada.' : 'Recordatorio eliminado.');
+  } catch (error) {
+    toast(`Error eliminando fila ${row}: ${error.message}`);
+  }
+}
+
 async function setSelectedRowsActive(activo) {
   const rows = [...state.selectedRows].sort((a, b) => a - b);
   if (!rows.length) return;
@@ -1030,11 +1276,11 @@ async function setSelectedRowsActive(activo) {
   const accionPasado = activo === 'SI' ? 'activados' : 'desactivados';
   const preview = selected
     .slice(0, 12)
-    .map((r) => `- ${r.row}: ${r.group} [${r.category || 'Sin categorÃ­a'}]`)
+    .map((r) => `- ${r.row}: ${r.group} [${r.category || 'Sin categoría'}]`)
     .join('\n');
-  const extra = selected.length > 12 ? `\n... y ${selected.length - 12} mÃ¡s.` : '';
+  const extra = selected.length > 12 ? `\n... y ${selected.length - 12} más.` : '';
   const ok = window.confirm(
-    `Vas a ${accion} ${rows.length} recordatorio(s):\n\n${preview}${extra}\n\nÂ¿Continuar?`
+    `Vas a ${accion} ${rows.length} recordatorio(s):\n\n${preview}${extra}\n\n¿Continuar?`
   );
   if (!ok) return;
 
@@ -1045,6 +1291,125 @@ async function setSelectedRowsActive(activo) {
       body: JSON.stringify({ rows, activo }),
     });
     updateStateFromWorkbook(data.workbook, filters);
+    toast(`${rows.length} recordatorio(s) ${accionPasado}.`);
+  } catch (error) {
+    toast(`Error actualizando seleccionados: ${error.message}`);
+  }
+}
+
+function selectedRowsSorted() {
+  return [...state.selectedRows].sort((a, b) => String(a).localeCompare(String(b), 'es', {
+    numeric: true,
+    sensitivity: 'base',
+  }));
+}
+
+function splitSelectedRows(rows) {
+  const normalRows = [];
+  const cleaningRows = [];
+  rows.forEach((row) => {
+    const reminder = reminderByRow(row);
+    if (!reminder) return;
+    if (reminder.isCleaningRotation) cleaningRows.push(reminder);
+    else normalRows.push(row);
+  });
+  return { normalRows, cleaningRows };
+}
+
+async function deleteSelectedRows() {
+  const rows = selectedRowsSorted();
+  if (!rows.length) return;
+
+  const selected = rows.map((row) => reminderByRow(row)).filter(Boolean);
+  const preview = selected
+    .slice(0, 12)
+    .map((r) => `- ${r.row}: ${r.group} [${r.category || 'Sin categoría'}]`)
+    .join('\n');
+  const extra = selected.length > 12 ? `\n... y ${selected.length - 12} más.` : '';
+  const ok = window.confirm(
+    `Vas a eliminar ${rows.length} recordatorio(s):\n\n${preview}${extra}\n\nEsta acción no se puede deshacer automáticamente. ¿Continuar?`
+  );
+  if (!ok) return;
+
+  const filters = captureFilters();
+  const { normalRows, cleaningRows } = splitSelectedRows(rows);
+
+  try {
+    let workbook = null;
+    if (normalRows.length) {
+      const data = await api('/api/reminders/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ rows: normalRows }),
+      });
+      workbook = data.workbook;
+    }
+
+    for (const reminder of cleaningRows) {
+      const data = await api(`/api/cleaning-rotations/${encodeURIComponent(reminder.group)}`, {
+        method: 'DELETE',
+      });
+      workbook = data.workbook;
+    }
+
+    state.selectedRows.clear();
+    if (workbook) updateStateFromWorkbook(workbook, filters);
+    else await loadReminders();
+    toast(`Eliminados ${rows.length} recordatorio(s).`);
+  } catch (error) {
+    toast(`Error eliminando seleccionados: ${error.message}`);
+  }
+}
+
+async function setSelectedRowsActive(activo) {
+  const rows = selectedRowsSorted();
+  if (!rows.length) return;
+
+  const selected = rows.map((row) => reminderByRow(row)).filter(Boolean);
+  const accion = activo === 'SI' ? 'activar' : 'desactivar';
+  const accionPasado = activo === 'SI' ? 'activados' : 'desactivados';
+  const preview = selected
+    .slice(0, 12)
+    .map((r) => `- ${r.row}: ${r.group} [${r.category || 'Sin categoría'}]`)
+    .join('\n');
+  const extra = selected.length > 12 ? `\n... y ${selected.length - 12} más.` : '';
+  const ok = window.confirm(
+    `Vas a ${accion} ${rows.length} recordatorio(s):\n\n${preview}${extra}\n\n¿Continuar?`
+  );
+  if (!ok) return;
+
+  const filters = captureFilters();
+  const { normalRows, cleaningRows } = splitSelectedRows(rows);
+
+  try {
+    let workbook = null;
+    if (normalRows.length) {
+      const data = await api('/api/reminders/bulk-active', {
+        method: 'POST',
+        body: JSON.stringify({ rows: normalRows, activo }),
+      });
+      workbook = data.workbook;
+    }
+
+    for (const reminder of cleaningRows) {
+      const cleaning = reminder.cleaning || {};
+      const data = await api(`/api/cleaning-rotations/${encodeURIComponent(reminder.group)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          enabled: activo === 'SI',
+          currentRoom: cleaning.currentRoom || 1,
+          currentResponsibleRoom: cleaningResponsibleRoom(cleaning),
+          hora: reminder.hora,
+          roomCount: cleaning.roomCount || 1,
+          sendDay: cleaning.sendDay || 'sab',
+          language: cleaning.language || 'both',
+          messageTemplate: cleaning.messageTemplate || reminder.mensaje,
+        }),
+      });
+      workbook = data.workbook;
+    }
+
+    if (workbook) updateStateFromWorkbook(workbook, filters);
+    else await loadReminders();
     toast(`${rows.length} recordatorio(s) ${accionPasado}.`);
   } catch (error) {
     toast(`Error actualizando seleccionados: ${error.message}`);
@@ -1217,7 +1582,7 @@ $('reminderGrid').addEventListener('click', (event) => {
   const row = rowIdFromDataset(tr.dataset.row);
 
   if (actionElement.dataset.action === 'edit') openEditModal(row);
-  if (actionElement.dataset.action === 'delete' && !isCleaningRow(row)) deleteRow(row);
+  if (actionElement.dataset.action === 'delete') deleteRow(row);
 });
 
 $('reminderGrid').addEventListener('change', (event) => {
@@ -1233,14 +1598,14 @@ $('reminderGrid').addEventListener('change', (event) => {
   const field = event.target.closest('[data-autosave]');
   if (!field) return;
   const tr = event.target.closest('tr[data-row]');
-  if (!isCleaningRow(tr.dataset.row)) scheduleAutoSave(rowIdFromDataset(tr.dataset.row));
+  scheduleAutoSave(rowIdFromDataset(tr.dataset.row));
 });
 
 $('reminderGrid').addEventListener('focusout', (event) => {
   const field = event.target.closest('[data-autosave]');
   if (!field || field.type === 'checkbox' || field.tagName === 'SELECT') return;
   const tr = event.target.closest('tr[data-row]');
-  if (!isCleaningRow(tr.dataset.row)) scheduleAutoSave(rowIdFromDataset(tr.dataset.row));
+  scheduleAutoSave(rowIdFromDataset(tr.dataset.row));
 });
 
 $('cleaningRotationGrid').addEventListener('change', (event) => {
@@ -1269,6 +1634,8 @@ $('modalScheduleType').addEventListener('change', () => {
   setModalScheduleType($('modalScheduleType').value);
 });
 $('modalCleaningRoomCount').addEventListener('input', refreshCleaningRoomOptions);
+$('modalCleaningCurrentRoom').addEventListener('change', updateModalCleaningNotes);
+$('modalHora').addEventListener('change', updateModalCleaningNotes);
 $('weeklyScheduleFields').addEventListener('change', (event) => {
   if (state.modalMode !== 'cleaning') return;
   const changed = event.target.closest('input[type="checkbox"]');
@@ -1276,6 +1643,7 @@ $('weeklyScheduleFields').addEventListener('change', (event) => {
   document.querySelectorAll('#weeklyScheduleFields input[type="checkbox"]').forEach((input) => {
     input.checked = input === changed;
   });
+  updateModalCleaningNotes();
 });
 $('houseComboButton').addEventListener('click', () => toggleHouseCombo());
 $('houseComboMenu').addEventListener('click', async (event) => {
@@ -1397,7 +1765,7 @@ $('bulkActivateBtn').addEventListener('click', () => setSelectedRowsActive('SI')
 $('bulkDeactivateBtn').addEventListener('click', () => setSelectedRowsActive('NO'));
 $('bulkDeleteBtn').addEventListener('click', deleteSelectedRows);
 $('selectVisibleRows').addEventListener('change', (event) => {
-  const visibleRows = filteredReminders().filter((r) => !r.isCleaningRotation).map((r) => r.row);
+  const visibleRows = filteredReminders().map((r) => r.row);
   if (event.target.checked) {
     visibleRows.forEach((row) => state.selectedRows.add(row));
   } else {
@@ -1413,6 +1781,7 @@ $('restartService').addEventListener('click', () => serviceAction('/api/service/
 $('debugMode').addEventListener('click', () => activateMode('debug'));
 $('productionMode').addEventListener('click', () => activateMode('production'));
 
+loadColumnWidths();
 initializeSortHeaders();
 loadSettings()
   .then(loadReminders)

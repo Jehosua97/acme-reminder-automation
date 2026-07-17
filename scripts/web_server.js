@@ -15,6 +15,7 @@ const {
   deleteReminders,
   updateRemindersActive,
   updateCleaningRotation,
+  deleteCleaningRotation,
   deleteCategory,
   deleteHouse,
 } = require('./data_store');
@@ -181,6 +182,16 @@ app.patch('/api/cleaning-rotations/:house', (req, res) => {
     const house = decodeURIComponent(req.params.house || '').trim();
     if (!house) return res.status(400).json({ error: 'Casa / grupo invalido.' });
     res.json({ ok: true, workbook: updateCleaningRotation(house, req.body || {}) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/cleaning-rotations/:house', (req, res) => {
+  try {
+    const house = decodeURIComponent(req.params.house || '').trim();
+    if (!house) return res.status(400).json({ error: 'Casa / grupo invalido.' });
+    res.json({ ok: true, workbook: deleteCleaningRotation(house) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -220,12 +220,18 @@ function normalizeCleaningRotation(input = {}) {
   const language = normalizeLanguage(input.language);
   const messageTemplate = text(input.messageTemplate || input.mensaje || input.message).trim()
     || defaultCleaningTemplate(language);
+  const rawResponsibleRoom = Number(input.currentResponsibleRoom || input.responsibleRoom || input.lastSentRoom || 0);
+  const fallbackResponsibleRoom = safeCurrentRoom <= 1 ? safeRoomCount : safeCurrentRoom - 1;
+  const safeResponsibleRoom = Number.isInteger(rawResponsibleRoom) && rawResponsibleRoom >= 1 && rawResponsibleRoom <= safeRoomCount
+    ? rawResponsibleRoom
+    : fallbackResponsibleRoom;
 
   return {
     house: text(input.house || input.group).trim(),
     enabled: input.enabled === undefined ? true : bool(input.enabled),
     roomCount: safeRoomCount,
     currentRoom: safeCurrentRoom,
+    currentResponsibleRoom: safeResponsibleRoom,
     sendDay,
     hora: normalizeHora(input.hora || CLEANING_DEFAULT_HOUR),
     language,
@@ -239,6 +245,21 @@ function nextRoom(rotation) {
   const current = Number(rotation.currentRoom || 1);
   const roomCount = Number(rotation.roomCount || 1);
   return current >= roomCount ? 1 : current + 1;
+}
+
+function previousRoom(rotation) {
+  const current = Number(rotation.currentRoom || 1);
+  const roomCount = Number(rotation.roomCount || 1);
+  return current <= 1 ? roomCount : current - 1;
+}
+
+function responsibleRoom(rotation) {
+  const roomCount = Number(rotation.roomCount || 1);
+  const currentResponsibleRoom = Number(rotation.currentResponsibleRoom || 0);
+  if (Number.isInteger(currentResponsibleRoom) && currentResponsibleRoom >= 1 && currentResponsibleRoom <= roomCount) {
+    return currentResponsibleRoom;
+  }
+  return previousRoom(rotation);
 }
 
 function normalizeReminder(input = {}, fallbackId = 1) {
@@ -415,11 +436,11 @@ function nextMonthlyOccurrences(reminder, now = new Date()) {
 
 function nextIntervalOccurrences(reminder, now = new Date()) {
   const interval = reminder.interval || {};
-  if (!interval.startDate || !interval.everyWeeks) return 'Falta programaciÃ³n por intervalo';
+  if (!interval.startDate || !interval.everyWeeks) return 'Falta programación por intervalo';
   if (!reminder.hora) return 'Falta hora';
 
   const startDate = parseDateOnly(interval.startDate);
-  if (!startDate) return 'Falta programaciÃ³n por intervalo';
+  if (!startDate) return 'Falta programación por intervalo';
 
   const { h, m } = parseHora(reminder.hora);
   const stepDays = interval.everyWeeks * 7;
@@ -441,7 +462,7 @@ function nextIntervalOccurrences(reminder, now = new Date()) {
     cycles += 1;
   }
 
-  return results.join('\n') || 'Falta programaciÃ³n por intervalo';
+  return results.join('\n') || 'Falta programación por intervalo';
 }
 
 function nextCleaningOccurrences(rotation, now = new Date()) {
@@ -476,6 +497,7 @@ function toApiCleaningRotation(rotation) {
     enabled: rotation.enabled,
     roomCount: rotation.roomCount,
     currentRoom: rotation.currentRoom,
+    currentResponsibleRoom: responsibleRoom(rotation),
     nextRoom: nextRoom(rotation),
     sendDay: rotation.sendDay,
     hora: rotation.hora,
@@ -489,8 +511,26 @@ function toApiCleaningRotation(rotation) {
 }
 
 function cleaningNotes(rotation) {
+  const responsibleRoom = previousRoom(rotation);
   const parts = [
-    `Esta semana el responsable es el cuarto #${rotation.currentRoom}.`,
+    `Esta semana el responsable es el cuarto #${responsibleRoom}.`,
+    `La próxima notificación se enviará para el cuarto #${rotation.currentRoom}.`,
+    `Si necesitas ajustar, usa el lápiz y cambia "Enviar próxima ejecución desde".`,
+  ];
+  if (rotation.lastSentAt && rotation.lastSentRoom) {
+    parts.push(`Último envío: ${rotation.lastSentAt} | cuarto #${rotation.lastSentRoom}.`);
+  }
+  return parts.join('\n');
+}
+
+function cleaningNotes(rotation) {
+  const currentResponsible = responsibleRoom(rotation);
+  const nextNotificationRoom = Number(rotation.currentRoom || 1);
+  const parts = [
+    `Esta semana el responsable es el cuarto #${currentResponsible}.`,
+    nextNotificationRoom === currentResponsible
+      ? `La próxima notificación se enviará OTRA VEZ para el cuarto #${nextNotificationRoom}.`
+      : `La próxima notificación se enviará para el cuarto #${nextNotificationRoom}.`,
     `Si necesitas ajustar, usa el lápiz y cambia "Enviar próxima ejecución desde".`,
   ];
   if (rotation.lastSentAt && rotation.lastSentRoom) {
@@ -715,6 +755,17 @@ function updateCleaningRotation(house, payload) {
   return readWorkbookLike();
 }
 
+function deleteCleaningRotation(house) {
+  const store = readStoreRaw();
+  const before = (store.cleaningRotations || []).length;
+  store.cleaningRotations = (store.cleaningRotations || []).filter((r) => r.house !== house);
+  if (store.cleaningRotations.length === before) {
+    throw new Error(`No existe rotacion de limpieza para "${house}".`);
+  }
+  writeStore(store);
+  return readWorkbookLike();
+}
+
 function rowsForSender() {
   const store = readStoreRaw();
   const reminderRows = store.reminders
@@ -765,6 +816,7 @@ function applySendResults(results) {
       if (!rotation || !result.ok) continue;
       rotation.lastSentAt = result.fecha || fechaLarga(new Date());
       rotation.lastSentRoom = rotation.currentRoom;
+      rotation.currentResponsibleRoom = rotation.currentRoom;
       rotation.currentRoom = nextRoom(rotation);
       continue;
     }
@@ -797,6 +849,7 @@ module.exports = {
   deleteReminders,
   updateRemindersActive,
   updateCleaningRotation,
+  deleteCleaningRotation,
   deleteCategory,
   deleteHouse,
   rowsForSender,
