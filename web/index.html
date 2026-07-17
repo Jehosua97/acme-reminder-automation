@@ -20,6 +20,7 @@
 
   <nav class="tabs">
     <button class="tab active" data-view="reminders">Recordatorios</button>
+    <button class="tab" data-view="cleaning">RotaciÃ³n limpieza</button>
     <button class="tab" data-view="system">Estado del sistema</button>
   </nav>
 
@@ -93,6 +94,31 @@
             </tr>
           </thead>
           <tbody id="reminderGrid"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="cleaningView" class="view">
+      <div class="hint">
+        Esta vista controla la limpieza rotativa. El sistema enviarÃ¡ el mensaje semanal con el cuarto responsable actual y, si WhatsApp confirma el envÃ­o, avanzarÃ¡ automÃ¡ticamente al siguiente cuarto.
+      </div>
+
+      <div class="table-shell cleaning-shell">
+        <table class="reminders-table cleaning-table">
+          <thead>
+            <tr>
+              <th>Casa</th>
+              <th>Cuartos</th>
+              <th>Responsable actual</th>
+              <th>Siguiente automÃ¡tico</th>
+              <th>Enviar prÃ³xima ejecuciÃ³n desde</th>
+              <th>Hora</th>
+              <th>DÃ­a</th>
+              <th>Idioma</th>
+              <th>PrÃ³ximo envÃ­o</th>
+            </tr>
+          </thead>
+          <tbody id="cleaningRotationGrid"></tbody>
         </table>
       </div>
     </section>

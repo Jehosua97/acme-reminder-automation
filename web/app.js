@@ -1,5 +1,6 @@
 const state = {
   reminders: [],
+  cleaningRotations: [],
   houses: [],
   categories: [],
   selectedHouses: new Set(),
@@ -512,6 +513,7 @@ function payloadFromModal() {
 
 function updateStateFromWorkbook(workbook, filters = captureFilters()) {
   state.reminders = workbook.reminders;
+  state.cleaningRotations = workbook.cleaningRotations || [];
   state.houses = workbook.houses;
   state.categories = workbook.categories;
   state.selectedRows = new Set([...state.selectedRows].filter((row) => state.reminders.some((r) => r.row === row)));
@@ -520,6 +522,49 @@ function updateStateFromWorkbook(workbook, filters = captureFilters()) {
   restoreFilters(filters);
   renderFilters();
   renderReminders();
+  renderCleaningRotations();
+}
+
+function languageLabel(value) {
+  if (value === 'en') return 'Inglés';
+  if (value === 'es') return 'Español';
+  return 'Inglés + Español';
+}
+
+function roomOptions(roomCount, selected) {
+  const count = Math.max(1, Number(roomCount || 1));
+  const current = Math.max(1, Math.min(count, Number(selected || 1)));
+  return Array.from({ length: count }, (_, index) => {
+    const room = index + 1;
+    return `<option value="${room}" ${room === current ? 'selected' : ''}>Habitación #${room}</option>`;
+  }).join('');
+}
+
+function renderCleaningRotations() {
+  const body = $('cleaningRotationGrid');
+  if (!body) return;
+
+  const rotations = [...(state.cleaningRotations || [])]
+    .sort((a, b) => a.house.localeCompare(b.house, 'es', { numeric: true, sensitivity: 'base' }));
+
+  if (!rotations.length) {
+    body.innerHTML = '<tr><td colspan="9" class="empty">No hay rotaciones de limpieza configuradas.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = rotations.map((r) => `
+    <tr data-cleaning-house="${escapeHtml(r.house)}" class="${r.enabled ? '' : 'disabled-reminder'}">
+      <td class="house-cell">${escapeHtml(r.house)}</td>
+      <td>${Number(r.roomCount || 0)}</td>
+      <td><strong>Habitación #${Number(r.currentRoom || 1)}</strong></td>
+      <td>Habitación #${Number(r.nextRoom || 1)}</td>
+      <td><select name="currentRoom" class="room-select">${roomOptions(r.roomCount, r.currentRoom)}</select></td>
+      <td><select name="hora" class="time-input">${timeOptions(r.hora, { includeBlank: false })}</select></td>
+      <td>${escapeHtml(DAY_LABELS[r.sendDay] || r.sendDay || 'Sábado')}</td>
+      <td>${escapeHtml(languageLabel(r.language))}</td>
+      <td class="date-cell">${escapeHtml(r.proximoEnvio || 'Sin próximo envío')}</td>
+    </tr>
+  `).join('');
 }
 
 async function saveRow(row, payload, { quiet = false } = {}) {
@@ -750,11 +795,28 @@ async function setSelectedRowsActive(activo) {
   }
 }
 
+async function saveCleaningRotation(house, payload) {
+  const row = document.querySelector(`tr[data-cleaning-house="${CSS.escape(house)}"]`);
+  if (row) row.classList.add('saving');
+  try {
+    const data = await api(`/api/cleaning-rotations/${encodeURIComponent(house)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+    updateStateFromWorkbook(data.workbook);
+    toast('Rotación de limpieza actualizada.');
+  } catch (error) {
+    toast(`Error actualizando rotación: ${error.message}`);
+    renderCleaningRotations();
+  }
+}
+
 async function loadReminders() {
   if (state.refreshPaused || state.savingRows.size) return;
   const filters = captureFilters();
   const data = await api('/api/reminders');
   state.reminders = data.reminders;
+  state.cleaningRotations = data.cleaningRotations || [];
   state.houses = data.houses;
   state.categories = data.categories;
   state.selectedHouses = new Set([...filters.houses].filter((h) => state.houses.includes(h)));
@@ -762,6 +824,7 @@ async function loadReminders() {
   restoreFilters(filters);
   renderFilters();
   renderReminders();
+  renderCleaningRotations();
 }
 
 async function loadSettings() {
@@ -922,6 +985,21 @@ $('reminderGrid').addEventListener('focusout', (event) => {
   if (!field || field.type === 'checkbox' || field.tagName === 'SELECT') return;
   const tr = event.target.closest('tr[data-row]');
   scheduleAutoSave(Number(tr.dataset.row));
+});
+
+$('cleaningRotationGrid').addEventListener('change', (event) => {
+  const field = event.target.closest('select');
+  if (!field) return;
+  const tr = event.target.closest('tr[data-cleaning-house]');
+  if (!tr) return;
+  const house = tr.dataset.cleaningHouse;
+  const rotation = state.cleaningRotations.find((r) => r.house === house);
+  if (!rotation) return;
+  saveCleaningRotation(house, {
+    ...rotation,
+    currentRoom: Number(tr.querySelector('[name="currentRoom"]').value),
+    hora: tr.querySelector('[name="hora"]').value,
+  });
 });
 
 $('editModalForm').addEventListener('submit', (event) => {

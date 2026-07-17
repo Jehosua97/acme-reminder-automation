@@ -13,6 +13,7 @@ const {
   deleteReminder,
   deleteReminders,
   updateRemindersActive,
+  updateCleaningRotation,
   deleteCategory,
   deleteHouse,
 } = require('./data_store');
@@ -161,6 +162,16 @@ app.post('/api/reminders/bulk-active', (req, res) => {
     const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
     const activo = req.body?.activo === 'SI' ? 'SI' : 'NO';
     res.json({ ok: true, workbook: updateRemindersActive(rows, activo) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/cleaning-rotations/:house', (req, res) => {
+  try {
+    const house = decodeURIComponent(req.params.house || '').trim();
+    if (!house) return res.status(400).json({ error: 'Casa / grupo invalido.' });
+    res.json({ ok: true, workbook: updateCleaningRotation(house, req.body || {}) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

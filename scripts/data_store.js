@@ -28,6 +28,9 @@ const DEFAULT_SETTINGS = {
 const TIME_STEP_MINUTES = DEFAULT_SETTINGS.timeStepMinutes;
 const WEEKLY_STATUS_RESET_DAY = 0; // Domingo
 const WEEKLY_STATUS_RESET_HOUR = 22; // 22:00 hora local
+const CLEANING_ROW_PREFIX = 'cleaning:';
+const CLEANING_DEFAULT_DAY = 'sab';
+const CLEANING_DEFAULT_HOUR = '10:00';
 
 function text(value) {
   return value === undefined || value === null ? '' : String(value);
@@ -164,6 +167,43 @@ function normalizeInterval(input = {}) {
   };
 }
 
+function normalizeLanguage(value) {
+  const normalized = text(value).trim().toLowerCase();
+  if (normalized === 'en') return 'en';
+  if (normalized === 'es') return 'es';
+  return 'both';
+}
+
+function normalizeCleaningRotation(input = {}) {
+  const roomCount = Number(input.roomCount || input.rooms || 0);
+  const safeRoomCount = Number.isInteger(roomCount) && roomCount >= 1 && roomCount <= 30 ? roomCount : 1;
+  const currentRoom = Number(input.currentRoom || 1);
+  const safeCurrentRoom = Number.isInteger(currentRoom)
+    ? Math.min(safeRoomCount, Math.max(1, currentRoom))
+    : 1;
+  const sendDay = DAY_KEYS.includes(text(input.sendDay).trim())
+    ? text(input.sendDay).trim()
+    : CLEANING_DEFAULT_DAY;
+
+  return {
+    house: text(input.house || input.group).trim(),
+    enabled: input.enabled === undefined ? true : bool(input.enabled),
+    roomCount: safeRoomCount,
+    currentRoom: safeCurrentRoom,
+    sendDay,
+    hora: normalizeHora(input.hora || CLEANING_DEFAULT_HOUR),
+    language: normalizeLanguage(input.language),
+    lastSentAt: text(input.lastSentAt).trim(),
+    lastSentRoom: Number.isInteger(Number(input.lastSentRoom)) ? Number(input.lastSentRoom) : 0,
+  };
+}
+
+function nextRoom(rotation) {
+  const current = Number(rotation.currentRoom || 1);
+  const roomCount = Number(rotation.roomCount || 1);
+  return current >= roomCount ? 1 : current + 1;
+}
+
 function normalizeReminder(input = {}, fallbackId = 1) {
   const id = Number(input.id ?? input.row ?? fallbackId);
   const scheduleType = normalizeScheduleType(input.scheduleType);
@@ -223,7 +263,7 @@ function weeklyStatusResetThreshold(now = new Date()) {
 function ensureStore() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(DATA_FILE)) {
-    const initial = { version: 1, nextId: 1, houses: [], reminders: [] };
+    const initial = { version: 1, nextId: 1, houses: [], cleaningRotations: [], reminders: [] };
     fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2), 'utf8');
   }
 }
@@ -237,12 +277,17 @@ function readStoreRaw() {
   const houses = normalizeHouseList([
     ...(parsed.houses || []),
     ...normalized.map((r) => r.filtrarCasa || r.group),
+    ...(parsed.cleaningRotations || []).map((r) => r.house || r.group),
   ]);
+  const cleaningRotations = (Array.isArray(parsed.cleaningRotations) ? parsed.cleaningRotations : [])
+    .map(normalizeCleaningRotation)
+    .filter((r) => r.house);
   const store = {
     version: 1,
     lastWeeklyStatusReset: text(parsed.lastWeeklyStatusReset).trim(),
     nextId: Math.max(Number(parsed.nextId || 1), maxId + 1),
     houses,
+    cleaningRotations,
     reminders: normalized,
   };
   return applyWeeklyStatusResetIfDue(store);
@@ -257,7 +302,11 @@ function writeStore(store) {
     houses: normalizeHouseList([
       ...(store.houses || []),
       ...(store.reminders || []).map((r) => r.filtrarCasa || r.group),
+      ...(store.cleaningRotations || []).map((r) => r.house),
     ]),
+    cleaningRotations: (store.cleaningRotations || [])
+      .map(normalizeCleaningRotation)
+      .filter((r) => r.house),
     reminders: (store.reminders || []).map((r, i) => normalizeReminder(r, i + 1)),
   };
   const tmp = `${DATA_FILE}.tmp`;
@@ -358,6 +407,71 @@ function nextIntervalOccurrences(reminder, now = new Date()) {
   return results.join('\n') || 'Falta programaciÃ³n por intervalo';
 }
 
+function nextCleaningOccurrences(rotation, now = new Date()) {
+  if (!rotation.enabled) return 'Inactivo';
+  if (!rotation.hora) return 'Falta hora';
+
+  const { h, m } = parseHora(rotation.hora);
+  const results = [];
+  const toleranceMs = readSettings().sendWindowMinutes * 60 * 1000;
+  for (let offset = 0; offset < 90 && results.length < 4; offset += 1) {
+    const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, h, m, 0, 0);
+    const dayKey = DIAS[candidate.getDay()][0];
+    if (dayKey !== rotation.sendDay) continue;
+    if (candidate.getTime() < now.getTime() - toleranceMs) continue;
+    results.push(fechaLarga(candidate));
+  }
+  return results.join('\n') || 'Falta programacion';
+}
+
+function cleaningMessage(rotation) {
+  const room = Number(rotation.currentRoom || 1);
+  const sun = '\u{1F31E}';
+
+  const english = [
+    `*${sun} Good morning everyone.*`,
+    '',
+    `As a reminder, this weekend the cleaning is assigned to room #${room}.`,
+    'The cleaning must be done on Saturday or Sunday. If it isn\u2019t completed on those days, you\u2019ll need to do it later and you\u2019ll also be responsible again next week for not following the assigned schedule.',
+    'If you\u2019d like the Clean & Clear team to handle the cleaning, the cost is *$60 CAD*. Please confirm on Saturday so it can be scheduled for Sunday.',
+    'From now on, cleanings will no longer be done on Mondays.',
+    '',
+    'Thank you for your cooperation!',
+  ].join('\n');
+
+  const spanish = [
+    `*${sun} Buenos d\u00edas a todos.*`,
+    '',
+    `Como recordatorio, este fin de semana la limpieza le corresponde a la habitaci\u00f3n #${room}.`,
+    'La limpieza debe realizarse *el s\u00e1bado o domingo*. Si no se hace en esos d\u00edas, deber\u00e1n realizarla despu\u00e9s y *tambi\u00e9n les tocar\u00e1 nuevamente la siguiente semana* por no respetar el horario asignado.',
+    'Si desean que el equipo de Clean & Clear realice la limpieza, el costo es de *$60 CAD*. Deber\u00e1n confirmarlo *el s\u00e1bado* para programarla el domingo.',
+    'A partir de ahora ya no se realizar\u00e1n limpiezas los lunes.',
+    '',
+    '\u00a1Gracias por su cooperaci\u00f3n!',
+  ].join('\n');
+
+  if (rotation.language === 'en') return english;
+  if (rotation.language === 'es') return spanish;
+  return `${english}\n\n-----------------------\n\n${spanish}`;
+}
+
+function toApiCleaningRotation(rotation) {
+  return {
+    house: rotation.house,
+    enabled: rotation.enabled,
+    roomCount: rotation.roomCount,
+    currentRoom: rotation.currentRoom,
+    nextRoom: nextRoom(rotation),
+    sendDay: rotation.sendDay,
+    hora: rotation.hora,
+    language: rotation.language,
+    proximoEnvio: nextCleaningOccurrences(rotation),
+    lastSentAt: rotation.lastSentAt,
+    lastSentRoom: rotation.lastSentRoom,
+    previewMessage: cleaningMessage(rotation),
+  };
+}
+
 function toApiReminder(reminder) {
   return {
     row: reminder.id,
@@ -389,7 +503,8 @@ function readWorkbookLike() {
     ...reminders.map((r) => r.filtrarCasa || r.group),
   ]);
   const categories = [...new Set(reminders.map((r) => r.category).filter(Boolean))].sort();
-  return { reminders, houses, categories, updatedAt: new Date().toISOString() };
+  const cleaningRotations = (store.cleaningRotations || []).map(toApiCleaningRotation);
+  return { reminders, houses, categories, cleaningRotations, updatedAt: new Date().toISOString() };
 }
 
 function createReminder(payload) {
@@ -496,13 +611,34 @@ function deleteHouse(house) {
     if (r.group !== house && r.filtrarCasa !== house) return r;
     return { ...r, group: '', filtrarCasa: '', activo: 'NO' };
   });
+  store.cleaningRotations = (store.cleaningRotations || []).filter((r) => r.house !== house);
+  writeStore(store);
+  return readWorkbookLike();
+}
+
+function updateCleaningRotation(house, payload) {
+  const store = readStoreRaw();
+  const rotation = (store.cleaningRotations || []).find((r) => r.house === house);
+  if (!rotation) throw new Error(`No existe rotacion de limpieza para "${house}".`);
+
+  const merged = normalizeCleaningRotation({
+    ...rotation,
+    ...payload,
+    house: rotation.house,
+  });
+  if (!merged.house) throw new Error('La casa es obligatoria.');
+
+  store.cleaningRotations = store.cleaningRotations.map((r) => (
+    r.house === house ? merged : r
+  ));
+  store.houses = normalizeHouseList([...(store.houses || []), merged.house]);
   writeStore(store);
   return readWorkbookLike();
 }
 
 function rowsForSender() {
   const store = readStoreRaw();
-  return store.reminders
+  const reminderRows = store.reminders
     .filter((r) => r.group && r.mensaje)
     .map((r) => ({
       hoja: 'JSON',
@@ -518,12 +654,42 @@ function rowsForSender() {
       proximoEnvio: nextOccurrences(r),
       mensaje: r.mensaje,
     }));
+
+  const cleaningRows = (store.cleaningRotations || [])
+    .filter((r) => r.enabled && r.house && r.roomCount && r.currentRoom)
+    .map((r) => ({
+      hoja: 'ROTACION_LIMPIEZA',
+      numeroFila: `${CLEANING_ROW_PREFIX}${r.house}`,
+      grupo: r.house,
+      categoria: 'Limpieza rotativa',
+      scheduleType: 'cleaningRotation',
+      monthly: { ordinals: [], weekday: '' },
+      interval: { startDate: '', everyWeeks: 0 },
+      hora: r.hora,
+      activo: r.enabled ? 'SI' : 'NO',
+      enviarManual: 'NO',
+      proximoEnvio: nextCleaningOccurrences(r),
+      mensaje: cleaningMessage(r),
+    }));
+
+  return [...reminderRows, ...cleaningRows];
 }
 
 function applySendResults(results) {
   if (!Array.isArray(results) || !results.length) return;
   const store = readStoreRaw();
   for (const result of results) {
+    const fila = text(result.fila);
+    if (fila.startsWith(CLEANING_ROW_PREFIX)) {
+      const house = fila.slice(CLEANING_ROW_PREFIX.length);
+      const rotation = (store.cleaningRotations || []).find((r) => r.house === house);
+      if (!rotation || !result.ok) continue;
+      rotation.lastSentAt = result.fecha || fechaLarga(new Date());
+      rotation.lastSentRoom = rotation.currentRoom;
+      rotation.currentRoom = nextRoom(rotation);
+      continue;
+    }
+
     const id = Number(result.fila);
     const reminder = store.reminders.find((r) => r.id === id);
     if (!reminder) continue;
@@ -550,6 +716,7 @@ module.exports = {
   deleteReminder,
   deleteReminders,
   updateRemindersActive,
+  updateCleaningRotation,
   deleteCategory,
   deleteHouse,
   rowsForSender,
