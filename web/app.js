@@ -337,6 +337,27 @@ function setModalInterval(interval = {}) {
   $('modalIntervalWeeks').value = option ? String(everyWeeks) : '2';
 }
 
+function setModalWeeklyDay(dayKey = 'sab') {
+  const selected = ['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'].includes(dayKey) ? dayKey : 'sab';
+  $('modalLun').checked = selected === 'lun';
+  $('modalMar').checked = selected === 'mar';
+  $('modalMie').checked = selected === 'mie';
+  $('modalJue').checked = selected === 'jue';
+  $('modalVie').checked = selected === 'vie';
+  $('modalSab').checked = selected === 'sab';
+  $('modalDom').checked = selected === 'dom';
+}
+
+function selectedModalWeeklyDay() {
+  if ($('modalLun').checked) return 'lun';
+  if ($('modalMar').checked) return 'mar';
+  if ($('modalMie').checked) return 'mie';
+  if ($('modalJue').checked) return 'jue';
+  if ($('modalVie').checked) return 'vie';
+  if ($('modalDom').checked) return 'dom';
+  return 'sab';
+}
+
 function setModalCleaningRotation(cleaning = {}) {
   const roomCount = Math.max(1, Number(cleaning.roomCount || 1));
   const currentRoom = Math.max(1, Math.min(roomCount, Number(cleaning.currentRoom || 1)));
@@ -345,7 +366,8 @@ function setModalCleaningRotation(cleaning = {}) {
     return `<option value="${room}" ${room === currentRoom ? 'selected' : ''}>Habitación #${room}</option>`;
   }).join('');
 
-  $('weeklyScheduleFields').classList.add('hidden');
+  setModalWeeklyDay(cleaning.sendDay || 'sab');
+  $('weeklyScheduleFields').classList.remove('hidden');
   $('monthlyScheduleFields').classList.add('hidden');
   $('intervalScheduleFields').classList.add('hidden');
   $('cleaningRotationFields').classList.remove('hidden');
@@ -714,13 +736,6 @@ function openEditModal(row) {
     setModalActive(reminder.activo || 'NO');
     $('modalMessage').value = reminder.mensaje || '';
     $('modalNotes').value = reminder.notas || '';
-    $('modalLun').checked = false;
-    $('modalMar').checked = false;
-    $('modalMie').checked = false;
-    $('modalJue').checked = false;
-    $('modalVie').checked = false;
-    $('modalSab').checked = true;
-    $('modalDom').checked = false;
     $('editModal').showModal();
     return;
   }
@@ -805,7 +820,7 @@ async function saveModal() {
       currentRoom: Number($('modalCleaningCurrentRoom').value),
       hora: $('modalHora').value,
       roomCount: reminder.cleaning?.roomCount,
-      sendDay: reminder.cleaning?.sendDay || 'sab',
+      sendDay: selectedModalWeeklyDay(),
       language: reminder.cleaning?.language || 'both',
     });
     return;
@@ -1157,6 +1172,14 @@ $('modalActivo').addEventListener('change', () => {
 });
 $('modalScheduleType').addEventListener('change', () => {
   setModalScheduleType($('modalScheduleType').value);
+});
+$('weeklyScheduleFields').addEventListener('change', (event) => {
+  if (state.modalMode !== 'cleaning') return;
+  const changed = event.target.closest('input[type="checkbox"]');
+  if (!changed) return;
+  document.querySelectorAll('#weeklyScheduleFields input[type="checkbox"]').forEach((input) => {
+    input.checked = input === changed;
+  });
 });
 $('houseComboButton').addEventListener('click', () => toggleHouseCombo());
 $('houseComboMenu').addEventListener('click', async (event) => {
