@@ -16,9 +16,13 @@ const state = {
   settings: { mode: 'production', timeStepMinutes: 30 },
   columnWidths: {},
   lastTableAutoFitSignature: '',
+  autoFitFrame: null,
+  renderTimer: null,
+  modalImages: [],
 };
 
 const $ = (id) => document.getElementById(id);
+const IMAGE_CATEGORY = 'Imagenes';
 const DEFAULT_TIME_STEP_MINUTES = 30;
 const SORT_COLUMNS = [
   { index: 1, key: 'group', label: 'Casa' },
@@ -57,6 +61,9 @@ const AUTO_FIT_LIMITS = {
   11: { min: 130, max: 220 },
   12: { min: 120, max: 155 },
 };
+const MAX_AUTOFIT_ROWS = 35;
+const LIGHTWEIGHT_AUTOFIT_COLUMNS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 12]);
+const COMPACT_FIXED_COLUMNS = new Set([9, 10, 11]);
 
 function normalizePlain(value) {
   return String(value ?? '')
@@ -69,6 +76,10 @@ function normalizePlain(value) {
 function isCleaningCategory(value) {
   const normalized = normalizePlain(value);
   return normalized === 'limpieza rotativa' || normalized === 'liempieza rotativa';
+}
+
+function isImageCategory(value) {
+  return normalizePlain(value) === normalizePlain(IMAGE_CATEGORY);
 }
 
 function cleaningResponsibleRoom(cleaning = {}) {
@@ -154,6 +165,137 @@ function escapeHtml(value) {
 function shortText(value, max = 95) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+function mediaItemsFromReminder(reminder = {}) {
+  const items = Array.isArray(reminder.mediaItems) ? reminder.mediaItems : [];
+  const normalized = items
+    .map((item) => ({
+      mediaPath: item?.mediaPath || '',
+      mediaName: item?.mediaName || '',
+      mediaMime: item?.mediaMime || '',
+      mediaUrl: item?.mediaUrl || '',
+    }))
+    .filter((item) => item.mediaPath || item.mediaUrl);
+
+  if (!normalized.length && (reminder.mediaPath || reminder.mediaUrl)) {
+    normalized.push({
+      mediaPath: reminder.mediaPath || '',
+      mediaName: reminder.mediaName || '',
+      mediaMime: reminder.mediaMime || '',
+      mediaUrl: reminder.mediaUrl || '',
+    });
+  }
+
+  return normalized;
+}
+
+function imageUrl(source) {
+  return source?.mediaUrl || (source?.mediaPath
+    ? `/uploads/${encodeURIComponent(String(source.mediaPath).split('/').pop())}`
+    : '');
+}
+
+function mediaLabel(source) {
+  if (!source?.mediaPath && !source?.mediaUrl) return '';
+  return source.mediaName || String(source.mediaPath || source.mediaUrl).split('/').pop() || 'Imagen';
+}
+
+function messagePreviewCell(reminder) {
+  const mediaItems = mediaItemsFromReminder(reminder);
+  const firstItem = mediaItems[0];
+  const url = imageUrl(firstItem);
+  const preview = escapeHtml(shortText(reminder.mensaje || (url ? 'Imagen sin caption' : '')));
+  if (!url) return preview;
+  const imageText = mediaItems.length === 1 ? 'Ver imagen' : `Ver ${mediaItems.length} imágenes`;
+  return `
+    <div class="message-preview-wrap">
+      <button type="button" class="image-thumb-button" data-image-row="${escapeHtml(reminder.row)}">
+        <img src="${escapeHtml(url)}" alt="${escapeHtml(mediaLabel(firstItem))}" loading="lazy" />
+        <span>${escapeHtml(imageText)}</span>
+      </button>
+      <div>${preview}</div>
+    </div>
+  `;
+}
+
+function openImagePreview(row) {
+  const reminder = reminderByRow(row);
+  const mediaItems = mediaItemsFromReminder(reminder);
+  if (!reminder || !mediaItems.length) return;
+  $('imagePreviewTitle').textContent = mediaItems.length === 1
+    ? mediaLabel(mediaItems[0])
+    : `${mediaItems.length} imágenes`;
+  $('imagePreviewSubtitle').textContent = `${reminder.group} · ${reminder.category || 'Sin categoria'}`;
+  $('imagePreviewImages').innerHTML = mediaItems.map((item) => `
+    <figure>
+      <img src="${escapeHtml(imageUrl(item))}" alt="${escapeHtml(mediaLabel(item))}" />
+      <figcaption>${escapeHtml(mediaLabel(item))}</figcaption>
+    </figure>
+  `).join('');
+  $('imagePreviewCaption').value = reminder.mensaje || '(Sin texto/caption)';
+  $('imagePreviewModal').showModal();
+}
+
+function setModalImages(images) {
+  state.modalImages = Array.isArray(images) ? images.filter((image) => image?.mediaPath || image?.mediaUrl) : [];
+  const preview = $('modalImagePreview');
+  if (!preview) return;
+
+  if (!state.modalImages.length) {
+    preview.innerHTML = '<span>Sin imágenes seleccionadas.</span>';
+    return;
+  }
+
+  preview.innerHTML = state.modalImages.map((image, index) => {
+    const url = imageUrl(image);
+    return `
+      <div class="selected-image-item">
+        <img src="${escapeHtml(url)}" alt="${escapeHtml(image.mediaName || 'Imagen seleccionada')}" />
+        <div>
+          <strong>${escapeHtml(image.mediaName || 'Imagen seleccionada')}</strong>
+          <span>${escapeHtml(image.mediaMime || '')}</span>
+        </div>
+        <button type="button" class="icon-button danger-icon" title="Quitar imagen" data-remove-modal-image="${index}">&#128465;&#65039;</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateImageFieldsVisibility() {
+  const imageMode = isImageCategory($('modalCategory')?.value);
+  const fields = $('imageFields');
+  if (fields) fields.classList.toggle('hidden', !imageMode);
+  if ($('modalMessage')) {
+    $('modalMessage').placeholder = imageMode
+      ? 'Texto opcional que se enviara junto con la(s) imagen(es).'
+      : '';
+  }
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('No se pudo leer la imagen.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadImageFile(file) {
+  if (!file) return null;
+  if (!/^image\/(png|jpe?g|webp|gif)$/i.test(file.type)) {
+    throw new Error('Usa una imagen PNG, JPG, WEBP o GIF.');
+  }
+  if (file.size > 12 * 1024 * 1024) {
+    throw new Error('La imagen es demasiado grande. Maximo 12 MB.');
+  }
+  const dataUrl = await fileToDataUrl(file);
+  const result = await api('/api/uploads/image', {
+    method: 'POST',
+    body: JSON.stringify({ name: file.name, type: file.type, dataUrl }),
+  });
+  return result.image;
 }
 
 function timeStepMinutes() {
@@ -292,6 +434,7 @@ function tableAutoFitSignature(reminders) {
 function setModalCategory(value) {
   $('modalCategory').value = value || '';
   $('categoryComboLabel').textContent = value || 'Seleccionar categoría';
+  updateImageFieldsVisibility();
   applyModalCategoryMode();
 }
 
@@ -324,7 +467,7 @@ function toggleHouseCombo(force) {
 
 function renderCategoryCombo() {
   const selected = $('modalCategory').value;
-  const categories = [...new Set(state.categories.filter(Boolean))].sort();
+  const categories = [...new Set([IMAGE_CATEGORY, ...state.categories.filter(Boolean)])].sort();
   $('categoryComboMenu').innerHTML = `
     <button type="button" class="combo-item add-category" data-category-action="add">+ Agregar nueva categoría</button>
     ${categories.map((category) => `
@@ -379,7 +522,7 @@ function scheduleCell(r) {
     return `<span class="schedule-pill schedule-edit" data-action="edit" title="Editar programacion">Mensual: ${escapeHtml(ordinals || '?')} ${escapeHtml(day)}</span>`;
   }
 
-  return `
+  return `<div class="weekly-days">
     ${dayCheckbox(r, 'lun', 'L')}
     ${dayCheckbox(r, 'mar', 'M')}
     ${dayCheckbox(r, 'mie', 'X')}
@@ -387,7 +530,7 @@ function scheduleCell(r) {
     ${dayCheckbox(r, 'vie', 'V')}
     ${dayCheckbox(r, 'sab', 'S')}
     ${dayCheckbox(r, 'dom', 'D')}
-  `;
+  </div>`;
 }
 
 function activeToggle(r) {
@@ -537,7 +680,7 @@ function renderRemindersLegacyUnused() {
       <td><span class="badge ${escapeHtml(r.estado)}">${escapeHtml(r.estado || 'SIN ESTADO')}</span></td>
       <td class="date-cell">${escapeHtml(r.proximoEnvio || 'Sin próximo envío')}</td>
       <td class="date-cell">${escapeHtml(r.ultimoEnvio || 'Sin envíos')}</td>
-      <td class="message-preview">${escapeHtml(shortText(r.mensaje))}</td>
+      <td class="message-preview">${messagePreviewCell(r)}</td>
       <td class="notes-preview">${escapeHtml(shortText(r.notas || 'Sin notas', 75))}</td>
       <td class="actions-cell">
         <button type="button" class="icon-button" title="Editar" data-action="edit">✏️</button>
@@ -595,7 +738,7 @@ function renderReminders() {
   renderSortIndicators();
 
   if (!reminders.length) {
-    body.innerHTML = '<tr><td colspan="11" class="empty">No hay recordatorios con esos filtros.</td></tr>';
+    body.innerHTML = '<tr><td colspan="12" class="empty">No hay recordatorios con esos filtros.</td></tr>';
     return;
   }
 
@@ -621,7 +764,7 @@ function renderReminders() {
         <td><span class="badge ${escapeHtml(r.estado)}">${escapeHtml(r.estado || 'SIN ESTADO')}</span></td>
         <td class="date-cell">${escapeHtml(r.proximoEnvio || 'Sin próximo envío')}</td>
         <td class="date-cell">${escapeHtml(r.ultimoEnvio || 'Sin envíos')}</td>
-        <td class="message-preview">${escapeHtml(shortText(r.mensaje))}</td>
+        <td class="message-preview">${messagePreviewCell(r)}</td>
         <td class="notes-preview">${escapeHtml(shortText(notesText, 75))}</td>
         <td class="actions-cell">
           <button type="button" class="icon-button" title="${cleaning ? 'Ajustar rotacion' : 'Editar'}" data-action="edit">&#9999;&#65039;</button>
@@ -632,10 +775,7 @@ function renderReminders() {
     `;
   }).join('');
   updateBulkDeleteControls(reminders);
-  const autoFitSignature = tableAutoFitSignature(reminders);
-  const shouldRecalculateWidths = autoFitSignature !== state.lastTableAutoFitSignature;
-  autoFitVisibleColumns({ includeManual: shouldRecalculateWidths });
-  state.lastTableAutoFitSignature = autoFitSignature;
+  scheduleAutoFit(reminders);
 }
 
 function initializeSortHeaders() {
@@ -714,14 +854,31 @@ function measureColumnText(text, font = '13px Segoe UI') {
   return Math.ceil(context.measureText(normalized).width);
 }
 
+function ensureColumnGroup(table) {
+  const columnCount = table.querySelectorAll('thead th').length;
+  let colgroup = table.querySelector('colgroup');
+  if (!colgroup) {
+    colgroup = document.createElement('colgroup');
+    table.insertBefore(colgroup, table.firstChild);
+  }
+  while (colgroup.children.length < columnCount) colgroup.appendChild(document.createElement('col'));
+  while (colgroup.children.length > columnCount) colgroup.lastElementChild.remove();
+  return colgroup;
+}
+
 function setColumnWidth(index, width) {
   const table = document.querySelector('#remindersView .reminders-table');
   if (!table) return;
   const safeWidth = Math.max(MIN_COLUMN_WIDTH, Number(width || 0));
-  table.querySelectorAll(`tr > *:nth-child(${index})`).forEach((cell) => {
-    cell.style.width = `${safeWidth}px`;
-    cell.style.minWidth = `${safeWidth}px`;
-  });
+  const widthPx = `${safeWidth}px`;
+  const col = ensureColumnGroup(table).children[index - 1];
+  if (col) col.style.width = widthPx;
+
+  const header = table.querySelector(`thead tr > *:nth-child(${index})`);
+  if (header) {
+    header.style.width = widthPx;
+    header.style.minWidth = widthPx;
+  }
 }
 
 function applyColumnWidths() {
@@ -739,12 +896,11 @@ function autoFitColumn(index, { clearManual = false } = {}) {
   if (!clearManual && state.columnWidths[index]) return;
   if (clearManual) {
     delete state.columnWidths[index];
-    saveColumnWidths();
   }
 
   const limit = columnLimit(Number(index));
   const header = table.querySelector(`thead tr > *:nth-child(${index})`);
-  const cells = [...table.querySelectorAll(`tbody tr > *:nth-child(${index})`)];
+  const cells = [...table.querySelectorAll(`tbody tr > *:nth-child(${index})`)].slice(0, MAX_AUTOFIT_ROWS);
   const font = window.getComputedStyle(table).font || '13px Segoe UI';
   const values = [
     header?.innerText || '',
@@ -759,13 +915,39 @@ function autoFitVisibleColumns({ includeManual = false } = {}) {
   const table = document.querySelector('#remindersView .reminders-table');
   if (!table) return;
   const columnCount = table.querySelectorAll('thead th').length;
+  ensureColumnGroup(table);
   if (includeManual) {
     state.columnWidths = {};
     saveColumnWidths();
   }
   for (let index = 1; index <= columnCount; index += 1) {
+    if (COMPACT_FIXED_COLUMNS.has(index) && !state.columnWidths[index]) {
+      setColumnWidth(index, columnLimit(index).min);
+      continue;
+    }
+    if (!LIGHTWEIGHT_AUTOFIT_COLUMNS.has(index) && !state.columnWidths[index]) continue;
     autoFitColumn(index, { clearManual: includeManual });
   }
+}
+
+function scheduleAutoFit(reminders) {
+  const autoFitSignature = tableAutoFitSignature(reminders);
+  const shouldRecalculateWidths = autoFitSignature !== state.lastTableAutoFitSignature;
+  state.lastTableAutoFitSignature = autoFitSignature;
+
+  if (state.autoFitFrame) cancelAnimationFrame(state.autoFitFrame);
+  state.autoFitFrame = requestAnimationFrame(() => {
+    state.autoFitFrame = null;
+    autoFitVisibleColumns({ includeManual: shouldRecalculateWidths });
+  });
+}
+
+function scheduleRenderReminders(delay = 120) {
+  if (state.renderTimer) clearTimeout(state.renderTimer);
+  state.renderTimer = setTimeout(() => {
+    state.renderTimer = null;
+    renderReminders();
+  }, delay);
 }
 
 function setupResizableColumns() {
@@ -852,6 +1034,10 @@ function payloadFromRow(row) {
     activo: tr.querySelector('[name="activoToggle"]').checked ? 'SI' : 'NO',
     enviarManual: current.enviarManual || 'NO',
     mensaje: current.mensaje,
+    mediaItems: mediaItemsFromReminder(current),
+    mediaPath: current.mediaPath || '',
+    mediaName: current.mediaName || '',
+    mediaMime: current.mediaMime || '',
     days: !isWeekly ? current.days : {
       lun: tr.querySelector('[name="lun"]').checked,
       mar: tr.querySelector('[name="mar"]').checked,
@@ -867,6 +1053,7 @@ function payloadFromRow(row) {
 function payloadFromModal() {
   const current = state.modalMode === 'edit' ? reminderByRow(state.modalRow) : null;
   const scheduleType = $('modalScheduleType').value;
+  const imageMode = isImageCategory($('modalCategory').value);
   return {
     group: $('modalGroup').value.trim(),
     category: $('modalCategory').value.trim(),
@@ -883,6 +1070,10 @@ function payloadFromModal() {
     activo: $('modalActivo').checked ? 'SI' : 'NO',
     enviarManual: current ? current.enviarManual : 'NO',
     mensaje: $('modalMessage').value,
+    mediaItems: imageMode ? state.modalImages : [],
+    mediaPath: imageMode ? (state.modalImages[0]?.mediaPath || '') : '',
+    mediaName: imageMode ? (state.modalImages[0]?.mediaName || '') : '',
+    mediaMime: imageMode ? (state.modalImages[0]?.mediaMime || '') : '',
     days: {
       lun: $('modalLun').checked,
       mar: $('modalMar').checked,
@@ -1021,6 +1212,9 @@ function openEditModal(row) {
     setModalActive(reminder.activo || 'NO');
     $('modalMessage').value = reminder.cleaning?.messageTemplate || reminder.mensaje || defaultCleaningTemplateUi();
     $('modalNotes').value = cleaningNotesUi(reminder);
+    if ($('modalImageFile')) $('modalImageFile').value = '';
+    setModalImages([]);
+    updateImageFieldsVisibility();
     $('editModal').showModal();
     return;
   }
@@ -1046,6 +1240,8 @@ function openEditModal(row) {
   setModalInterval(reminder.interval || {});
   setModalActive(reminder.activo || 'NO');
   $('modalMessage').value = reminder.mensaje || '';
+  if ($('modalImageFile')) $('modalImageFile').value = '';
+  setModalImages(mediaItemsFromReminder(reminder));
   $('modalNotes').value = reminder.notas || '';
   $('modalLun').checked = Boolean(reminder.days.lun);
   $('modalMar').checked = Boolean(reminder.days.mar);
@@ -1079,6 +1275,8 @@ function openAddModal() {
   setModalInterval({});
   setModalActive('SI');
   $('modalMessage').value = '';
+  if ($('modalImageFile')) $('modalImageFile').value = '';
+  setModalImages([]);
   $('modalNotes').value = 'Las notas se generan por el sistema después de enviar.';
   $('modalLun').checked = false;
   $('modalMar').checked = false;
@@ -1118,8 +1316,12 @@ async function saveModal() {
     toast('La casa / grupo exacto no puede quedar vacío.');
     return;
   }
-  if (!payload.mensaje.trim()) {
-    toast('El mensaje no puede quedar vacío.');
+  if (isImageCategory(payload.category) && !payload.mediaItems.length) {
+    toast('Selecciona al menos una imagen para la categoría Imagenes.');
+    return;
+  }
+  if (!payload.mensaje.trim() && !payload.mediaItems.length) {
+    toast('Agrega un mensaje o una imagen.');
     return;
   }
   if (state.modalMode === 'add' && isCleaningCategory(payload.category)) {
@@ -1452,6 +1654,43 @@ async function loadSettings() {
   state.settings = await api('/api/settings');
 }
 
+function formatMinutes(msOrMinutes, unit = 'ms') {
+  const minutes = unit === 'ms' ? Math.round(Number(msOrMinutes || 0) / 60000) : Number(msOrMinutes || 0);
+  if (!minutes) return '--';
+  return minutes === 1 ? '1 minuto' : `${minutes} minutos`;
+}
+
+function meaningfulResultsLog(value) {
+  const lines = String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.length > 1 ? lines.join('\n') : '';
+}
+
+function firstUsefulStatusLine(value) {
+  const lines = String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.find((line) => !/^OK$/i.test(line)) || lines[0] || 'Sin estado todavía.';
+}
+
+function setOperationStatus(visible, title = '', detail = '') {
+  const box = $('operationStatus');
+  if (!box) return;
+  box.classList.toggle('hidden', !visible);
+  if ($('operationTitle')) $('operationTitle').textContent = title || 'Trabajando...';
+  if ($('operationDetail')) $('operationDetail').textContent = detail || 'Espera unos segundos mientras Windows actualiza el servicio.';
+}
+
+function setSystemButtonsDisabled(disabled) {
+  ['stopService', 'debugMode', 'productionMode', 'refreshStatus']
+    .map((id) => $(id))
+    .filter(Boolean)
+    .forEach((button) => { button.disabled = disabled; });
+}
+
 async function loadStatus() {
   const s = await api('/api/status');
   if (s.settings) state.settings = s.settings;
@@ -1476,6 +1715,41 @@ async function loadStatus() {
   pauseButton.classList.toggle('paused', s.running && s.paused);
   pauseButton.disabled = !s.running;
 
+  const mode = s.settings?.mode === 'debug' ? 'Debug' : 'Producción';
+  const intervalText = formatMinutes(s.settings?.serviceIntervalMs, 'ms');
+  const windowText = formatMinutes(s.settings?.sendWindowMinutes, 'minutes');
+  const statusCard = $('whatsappStatusCard');
+  if (statusCard) {
+    statusCard.classList.toggle('ok', s.running && !s.paused);
+    statusCard.classList.toggle('paused', s.running && s.paused);
+    statusCard.classList.toggle('bad', !s.running);
+  }
+  if ($('systemModePill')) $('systemModePill').textContent = `Modo: ${mode}`;
+  if ($('systemFriendlySummary')) {
+    $('systemFriendlySummary').textContent = s.running
+      ? (s.paused ? 'El servicio está iniciado, pero los envíos están pausados.' : 'Todo listo: el servicio está revisando recordatorios automáticamente.')
+      : 'Atención: el worker de WhatsApp está detenido. Usa “Activar modo Testing” o “Activar modo Producción”.';
+  }
+  if ($('serviceHumanStatus')) {
+    $('serviceHumanStatus').textContent = s.running
+      ? (s.paused ? 'Pausado' : 'Corriendo')
+      : 'Detenido';
+  }
+  if ($('serviceHumanDetail')) {
+    $('serviceHumanDetail').textContent = s.running
+      ? `PID ${s.pid || '--'}${s.paused ? ' · envíos pausados' : ' · WhatsApp conectado por sesión local'}`
+      : 'No está revisando ni enviando recordatorios.';
+  }
+  if ($('schedulerHumanStatus')) {
+    $('schedulerHumanStatus').textContent = `${intervalText} · ventana ${windowText}`;
+  }
+  if ($('lastStatusHuman')) $('lastStatusHuman').textContent = firstUsefulStatusLine(s.status);
+  if ($('lastStatusDetail')) {
+    $('lastStatusDetail').textContent = s.running
+      ? 'Si reiniciaste el servicio, puede tardar unos segundos en volver a confirmar.'
+      : 'El último estado puede ser viejo si el servicio está detenido.';
+  }
+
   $('serviceStatus').textContent = JSON.stringify({
     running: s.running,
     paused: s.paused,
@@ -1484,8 +1758,12 @@ async function loadStatus() {
   }, null, 2);
   $('statusFile').textContent = s.status || 'Sin estado.';
   $('serviceLog').textContent = s.serviceLog || 'Sin log.';
-  $('resultsLog').textContent = s.results || 'Sin resultados.';
+  const results = meaningfulResultsLog(s.results);
+  $('resultsLog').textContent = results;
+  if ($('resultsEmpty')) $('resultsEmpty').classList.toggle('hidden', Boolean(results));
+  $('resultsLog').classList.toggle('hidden', !results);
   $('sentLog').textContent = s.sentLog || 'Sin envíos registrados.';
+  return s;
 }
 
 async function togglePause() {
@@ -1507,18 +1785,65 @@ async function togglePause() {
 }
 
 async function serviceAction(path, message) {
-  const buttons = ['startService', 'stopService', 'restartService'].map((id) => $(id));
-  buttons.forEach((button) => { button.disabled = true; });
+  const actionConfig = {
+    '/api/service/start': {
+      title: 'Iniciando servicio...',
+      detail: 'Abriendo el worker de WhatsApp. Puede tardar unos segundos en aparecer como corriendo.',
+      done: (status) => status.running,
+      success: 'Servicio corriendo.',
+    },
+    '/api/service/stop': {
+      title: 'Deteniendo servicio...',
+      detail: 'Cerrando el worker de WhatsApp de forma segura.',
+      done: (status) => !status.running,
+      success: 'Servicio detenido.',
+    },
+    '/api/service/restart': {
+      title: 'Reiniciando servicio...',
+      detail: 'Primero se detiene el worker y luego se vuelve a iniciar. Espera a que diga “corriendo”.',
+      done: (status) => status.running,
+      success: 'Servicio reiniciado y corriendo.',
+    },
+  }[path] || {
+    title: 'Actualizando servicio...',
+    detail: 'Espera unos segundos.',
+    done: () => true,
+    success: message,
+  };
+
+  setSystemButtonsDisabled(true);
+  setOperationStatus(true, actionConfig.title, actionConfig.detail);
   try {
     await api(path, { method: 'POST', body: '{}' });
-    toast(message);
-    setTimeout(loadStatus, 1200);
-    setTimeout(loadStatus, 7000);
+    let latestStatus = await loadStatus();
+    for (let attempt = 1; attempt <= 10 && !actionConfig.done(latestStatus); attempt += 1) {
+      setOperationStatus(
+        true,
+        actionConfig.title,
+        `Verificando estado... intento ${attempt}/10. Esto puede tardar un poco si WhatsApp Web está iniciando.`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      latestStatus = await loadStatus();
+    }
+
+    if (actionConfig.done(latestStatus)) {
+      toast(actionConfig.success);
+      setOperationStatus(false);
+    } else {
+      setOperationStatus(
+        true,
+        'Aún verificando...',
+        'Windows aceptó la acción, pero el panel todavía no ve el estado esperado. Usa “Actualizar estado” en unos segundos.'
+      );
+      toast('Acción enviada. El estado todavía se está confirmando.');
+      setTimeout(() => setOperationStatus(false), 7000);
+    }
   } catch (error) {
+    setOperationStatus(false);
     toast(`Error: ${error.message}`);
   } finally {
     setTimeout(() => {
-      buttons.forEach((button) => { button.disabled = false; });
+      setSystemButtonsDisabled(false);
     }, 1500);
   }
 }
@@ -1528,8 +1853,12 @@ async function activateMode(mode) {
   const settings = isDebug
     ? { mode: 'debug', timeStepMinutes: 1, serviceIntervalMs: 120000, sendWindowMinutes: 3 }
     : { mode: 'production', timeStepMinutes: 30, serviceIntervalMs: 300000, sendWindowMinutes: 10 };
-  const buttons = ['debugMode', 'productionMode', 'restartService'].map((id) => $(id)).filter(Boolean);
-  buttons.forEach((button) => { button.disabled = true; });
+  setSystemButtonsDisabled(true);
+  setOperationStatus(
+    true,
+    isDebug ? 'Activando modo Debug...' : 'Activando modo Producción...',
+    'Guardando configuración y reiniciando el worker para que tome los cambios.'
+  );
   try {
     const result = await api('/api/settings', {
       method: 'POST',
@@ -1537,16 +1866,23 @@ async function activateMode(mode) {
     });
     state.settings = result.settings;
     await api('/api/service/restart', { method: 'POST', body: '{}' });
-    await loadStatus();
+    let latestStatus = await loadStatus();
+    for (let attempt = 1; attempt <= 10 && !latestStatus.running; attempt += 1) {
+      setOperationStatus(true, 'Esperando servicio...', `Verificando reinicio... intento ${attempt}/10.`);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      latestStatus = await loadStatus();
+    }
     await loadReminders();
+    setOperationStatus(false);
     toast(isDebug
-      ? 'Modo Debug activado: revision 2 min, ventana 3 min, hora cada minuto.'
+      ? 'Modo Testing activado: revision 2 min, ventana 3 min, hora cada minuto.'
       : 'Modo Produccion activado: revision 5 min, ventana 10 min, hora cada 30 min.');
   } catch (error) {
+    setOperationStatus(false);
     toast(`Error activando modo: ${error.message}`);
   } finally {
     setTimeout(() => {
-      buttons.forEach((button) => { button.disabled = false; });
+      setSystemButtonsDisabled(false);
     }, 1500);
   }
 }
@@ -1566,12 +1902,13 @@ $('houseFilter').addEventListener('change', (event) => {
   if (!checkbox) return;
   if (checkbox.checked) state.selectedHouses.add(checkbox.value);
   else state.selectedHouses.delete(checkbox.value);
-  renderReminders();
+  scheduleRenderReminders(40);
 });
 
-['categoryFilter', 'statusFilter', 'activeFilter', 'searchBox'].forEach((id) => {
-  $(id).addEventListener('input', renderReminders);
+['categoryFilter', 'statusFilter', 'activeFilter'].forEach((id) => {
+  $(id).addEventListener('input', () => scheduleRenderReminders(40));
 });
+$('searchBox').addEventListener('input', () => scheduleRenderReminders(180));
 
 $('reminderGrid').addEventListener('click', (event) => {
   const actionElement = event.target.closest('[data-action]');
@@ -1583,6 +1920,13 @@ $('reminderGrid').addEventListener('click', (event) => {
 
   if (actionElement.dataset.action === 'edit') openEditModal(row);
   if (actionElement.dataset.action === 'delete') deleteRow(row);
+});
+
+$('reminderGrid').addEventListener('click', (event) => {
+  const preview = event.target.closest('[data-image-row]');
+  if (!preview) return;
+  event.preventDefault();
+  openImagePreview(rowIdFromDataset(preview.dataset.imageRow));
 });
 
 $('reminderGrid').addEventListener('change', (event) => {
@@ -1636,6 +1980,31 @@ $('modalScheduleType').addEventListener('change', () => {
 $('modalCleaningRoomCount').addEventListener('input', refreshCleaningRoomOptions);
 $('modalCleaningCurrentRoom').addEventListener('change', updateModalCleaningNotes);
 $('modalHora').addEventListener('change', updateModalCleaningNotes);
+$('modalImageFile').addEventListener('change', async (event) => {
+  const files = [...(event.target.files || [])];
+  if (!files.length) return;
+  try {
+    toast(files.length === 1 ? 'Subiendo imagen...' : `Subiendo ${files.length} imágenes...`);
+    const uploaded = [];
+    for (const file of files) {
+      uploaded.push(await uploadImageFile(file));
+    }
+    setModalImages([...state.modalImages, ...uploaded]);
+    toast(files.length === 1 ? 'Imagen lista para guardar.' : 'Imágenes listas para guardar.');
+  } catch (error) {
+    toast(`Error subiendo imagen: ${error.message}`);
+  } finally {
+    event.target.value = '';
+  }
+});
+
+$('modalImagePreview').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-remove-modal-image]');
+  if (!button) return;
+  const index = Number(button.dataset.removeModalImage);
+  if (!Number.isInteger(index)) return;
+  setModalImages(state.modalImages.filter((_, itemIndex) => itemIndex !== index));
+});
 $('weeklyScheduleFields').addEventListener('change', (event) => {
   if (state.modalMode !== 'cleaning') return;
   const changed = event.target.closest('input[type="checkbox"]');
@@ -1775,9 +2144,7 @@ $('selectVisibleRows').addEventListener('change', (event) => {
 });
 $('pauseToggle').addEventListener('click', togglePause);
 $('refreshStatus').addEventListener('click', () => loadStatus().then(() => toast('Estado actualizado.')));
-$('startService').addEventListener('click', () => serviceAction('/api/service/start', 'Servicio iniciado.'));
 $('stopService').addEventListener('click', () => serviceAction('/api/service/stop', 'Servicio detenido.'));
-$('restartService').addEventListener('click', () => serviceAction('/api/service/restart', 'Servicio reiniciado.'));
 $('debugMode').addEventListener('click', () => activateMode('debug'));
 $('productionMode').addEventListener('click', () => activateMode('production'));
 
@@ -1790,6 +2157,6 @@ loadStatus().catch(() => {});
 setInterval(loadStatus, 15000);
 setInterval(() => {
   const active = document.activeElement;
-  const editingInline = active && active.closest && active.closest('#reminderGrid');
-  if (!editingInline) loadReminders().catch(() => {});
+  const userIsEditing = active && active.closest && active.closest('#reminderGrid, #editModal, .filters');
+  if (!userIsEditing) loadReminders().catch(() => {});
 }, 20000);

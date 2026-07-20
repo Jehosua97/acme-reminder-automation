@@ -7,6 +7,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DATA_DIR = path.join(PROJECT_ROOT, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'reminders.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const IMAGE_CATEGORY = 'Imagenes';
 
 const DIAS = [
   ['dom', 'domingo'],
@@ -73,6 +74,33 @@ function bool(value) {
   if (typeof value === 'boolean') return value;
   const normalized = text(value).trim().toUpperCase();
   return normalized === 'TRUE' || normalized === 'SI' || normalized === 'YES' || normalized === '1';
+}
+
+function normalizeMediaItems(input = {}) {
+  const rawItems = Array.isArray(input.mediaItems) ? input.mediaItems : [];
+  const items = rawItems
+    .map((item) => ({
+      mediaPath: text(item?.mediaPath).trim(),
+      mediaName: text(item?.mediaName).trim(),
+      mediaMime: text(item?.mediaMime).trim(),
+    }))
+    .filter((item) => item.mediaPath);
+
+  const legacyPath = text(input.mediaPath).trim();
+  if (!items.length && legacyPath) {
+    items.push({
+      mediaPath: legacyPath,
+      mediaName: text(input.mediaName).trim(),
+      mediaMime: text(input.mediaMime).trim(),
+    });
+  }
+
+  return items;
+}
+
+function primaryMediaItem(reminder = {}) {
+  const items = normalizeMediaItems(reminder);
+  return items[0] || { mediaPath: '', mediaName: '', mediaMime: '' };
 }
 
 function pad2(value) {
@@ -265,6 +293,8 @@ function responsibleRoom(rotation) {
 function normalizeReminder(input = {}, fallbackId = 1) {
   const id = Number(input.id ?? input.row ?? fallbackId);
   const scheduleType = normalizeScheduleType(input.scheduleType);
+  const mediaItems = normalizeMediaItems(input);
+  const primaryMedia = primaryMediaItem({ mediaItems });
   return {
     id,
     group: text(input.group).trim(),
@@ -287,9 +317,21 @@ function normalizeReminder(input = {}, fallbackId = 1) {
     estado: text(input.estado || 'PENDIENTE').trim() || 'PENDIENTE',
     ultimoEnvio: text(input.ultimoEnvio).trim(),
     mensaje: text(input.mensaje),
+    mediaItems,
+    mediaPath: primaryMedia.mediaPath,
+    mediaName: primaryMedia.mediaName,
+    mediaMime: primaryMedia.mediaMime,
     notas: text(input.notas),
     filtrarCasa: text(input.filtrarCasa || input.group).trim(),
   };
+}
+
+function reminderHasSendContent(reminder) {
+  return Boolean(text(reminder.mensaje).trim() || normalizeMediaItems(reminder).length);
+}
+
+function isImageReminder(reminder) {
+  return text(reminder.category).trim().toLowerCase() === IMAGE_CATEGORY.toLowerCase();
 }
 
 function hasScheduledDay(reminder) {
@@ -571,6 +613,8 @@ function toApiCleaningReminder(rotation) {
 }
 
 function toApiReminder(reminder) {
+  const mediaItems = normalizeMediaItems(reminder);
+  const primaryMedia = primaryMediaItem({ mediaItems });
   return {
     row: reminder.id,
     group: reminder.group,
@@ -586,6 +630,14 @@ function toApiReminder(reminder) {
     ultimoEnvio: reminder.ultimoEnvio,
     proximoEnvio: nextOccurrences(reminder),
     mensaje: reminder.mensaje,
+    mediaItems: mediaItems.map((item) => ({
+      ...item,
+      mediaUrl: `/uploads/${encodeURIComponent(path.basename(item.mediaPath))}`,
+    })),
+    mediaPath: primaryMedia.mediaPath,
+    mediaName: primaryMedia.mediaName,
+    mediaMime: primaryMedia.mediaMime,
+    mediaUrl: primaryMedia.mediaPath ? `/uploads/${encodeURIComponent(path.basename(primaryMedia.mediaPath))}` : '',
     notas: reminder.notas,
     filtrarCasa: reminder.filtrarCasa || reminder.group,
   };
@@ -594,7 +646,7 @@ function toApiReminder(reminder) {
 function readWorkbookLike() {
   const store = readStoreRaw();
   const regularReminders = store.reminders
-    .filter((r) => r.group && r.mensaje)
+    .filter((r) => r.group && reminderHasSendContent(r))
     .map(toApiReminder);
   const cleaningReminders = (store.cleaningRotations || []).map(toApiCleaningReminder);
   const reminders = [...regularReminders, ...cleaningReminders];
@@ -602,7 +654,10 @@ function readWorkbookLike() {
     ...(store.houses || []),
     ...reminders.map((r) => r.filtrarCasa || r.group),
   ]);
-  const categories = [...new Set(reminders.map((r) => r.category).filter(Boolean))].sort();
+  const categories = [...new Set([
+    IMAGE_CATEGORY,
+    ...reminders.map((r) => r.category).filter(Boolean),
+  ])].sort();
   const cleaningRotations = (store.cleaningRotations || []).map(toApiCleaningRotation);
   return { reminders, houses, categories, cleaningRotations, updatedAt: new Date().toISOString() };
 }
@@ -611,7 +666,8 @@ function createReminder(payload) {
   const store = readStoreRaw();
   const reminder = normalizeReminder({ ...payload, id: store.nextId }, store.nextId);
   if (!reminder.group) throw new Error('La casa / grupo exacto es obligatorio.');
-  if (!reminder.mensaje.trim()) throw new Error('El mensaje es obligatorio.');
+  if (isImageReminder(reminder) && !normalizeMediaItems(reminder).length) throw new Error('Selecciona al menos una imagen para la categoria Imagenes.');
+  if (!reminderHasSendContent(reminder)) throw new Error('Agrega un mensaje o una imagen.');
   reminder.hora = normalizeHora(reminder.hora);
   if (reminder.scheduleType === 'monthly') {
     if (!reminder.monthly.weekday) throw new Error('Selecciona el dia mensual.');
@@ -655,7 +711,8 @@ function updateReminder(id, payload) {
 
   const merged = normalizeReminder({ ...reminder, ...payload, id: reminder.id }, reminder.id);
   if (!merged.group) throw new Error('La casa / grupo exacto es obligatorio.');
-  if (!merged.mensaje.trim()) throw new Error('El mensaje es obligatorio.');
+  if (isImageReminder(merged) && !normalizeMediaItems(merged).length) throw new Error('Selecciona al menos una imagen para la categoria Imagenes.');
+  if (!reminderHasSendContent(merged)) throw new Error('Agrega un mensaje o una imagen.');
   merged.hora = normalizeHora(merged.hora);
   if (merged.scheduleType === 'monthly') {
     if (!merged.monthly.weekday) throw new Error('Selecciona el dia mensual.');
@@ -769,7 +826,7 @@ function deleteCleaningRotation(house) {
 function rowsForSender() {
   const store = readStoreRaw();
   const reminderRows = store.reminders
-    .filter((r) => r.group && r.mensaje)
+    .filter((r) => r.group && reminderHasSendContent(r))
     .map((r) => ({
       hoja: 'JSON',
       numeroFila: r.id,
@@ -783,6 +840,10 @@ function rowsForSender() {
       enviarManual: r.enviarManual,
       proximoEnvio: nextOccurrences(r),
       mensaje: r.mensaje,
+      mediaItems: normalizeMediaItems(r),
+      mediaPath: primaryMediaItem(r).mediaPath,
+      mediaName: primaryMediaItem(r).mediaName,
+      mediaMime: primaryMediaItem(r).mediaMime,
     }));
 
   const cleaningRows = (store.cleaningRotations || [])

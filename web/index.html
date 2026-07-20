@@ -123,23 +123,65 @@
     </section>
 
     <section id="systemView" class="view">
+      <div class="system-hero">
+        <div>
+          <p class="eyebrow">Panel operativo</p>
+          <h2>Estado del sistema</h2>
+          <p id="systemFriendlySummary">Revisando servicio...</p>
+        </div>
+        <div id="systemModePill" class="mode-pill">Modo: --</div>
+      </div>
+
+      <div id="operationStatus" class="operation-status hidden">
+        <div class="spinner"></div>
+        <div>
+          <strong id="operationTitle">Trabajando...</strong>
+          <p id="operationDetail">Espera unos segundos mientras Windows actualiza el servicio.</p>
+        </div>
+      </div>
+
       <div class="system-actions">
-        <button id="startService">Iniciar servicio</button>
+        <button id="debugMode" type="button">Activar modo Testing</button>
+        <button id="productionMode" type="button">Activar modo Producción</button>
         <button id="stopService" class="danger">Detener servicio</button>
-        <button id="restartService">Reiniciar servicio</button>
-        <button id="debugMode" type="button">Modo Debug</button>
-        <button id="productionMode" type="button">Modo Producción</button>
         <button id="refreshStatus">Actualizar estado</button>
       </div>
 
-      <div class="cards">
-        <article class="card">
-          <h2>Servicio WhatsApp</h2>
-          <pre id="serviceStatus">Cargando...</pre>
+      <div class="status-grid">
+        <article class="status-card" id="whatsappStatusCard">
+          <span class="status-icon">●</span>
+          <div>
+            <h2>WhatsApp worker</h2>
+            <p id="serviceHumanStatus">Cargando...</p>
+            <small id="serviceHumanDetail"></small>
+          </div>
         </article>
+        <article class="status-card">
+          <span class="status-icon neutral">↻</span>
+          <div>
+            <h2>Revisión automática</h2>
+            <p id="schedulerHumanStatus">Cargando configuración...</p>
+            <small>El worker revisa recordatorios pendientes con anti-duplicados.</small>
+          </div>
+        </article>
+        <article class="status-card">
+          <span class="status-icon neutral">📝</span>
+          <div>
+            <h2>Última revisión</h2>
+            <p id="lastStatusHuman">Sin estado todavía.</p>
+            <small id="lastStatusDetail"></small>
+          </div>
+        </article>
+      </div>
+
+      <div class="cards system-main-cards">
         <article class="card">
           <h2>Último estado</h2>
           <pre id="statusFile"></pre>
+        </article>
+        <article class="card">
+          <h2>Detalles del servicio</h2>
+          <pre id="serviceStatus">Cargando...</pre>
         </article>
       </div>
 
@@ -148,8 +190,11 @@
           <h2>servicio_programados.log</h2>
           <pre id="serviceLog"></pre>
         </article>
-        <article class="card">
-          <h2>resultados_programados.tsv</h2>
+        <article class="card" id="resultsCard">
+          <h2>Resultados de la última corrida</h2>
+          <div id="resultsEmpty" class="empty-log">
+            Todavía no hay resultados nuevos para mostrar. Esto es normal si la última revisión no tenía mensajes pendientes.
+          </div>
           <pre id="resultsLog"></pre>
         </article>
         <article class="card">
@@ -282,6 +327,15 @@
         <textarea id="modalMessage"></textarea>
       </label>
 
+      <div class="full image-fields hidden" id="imageFields">
+        <label>Imagen(es) a enviar
+          <input id="modalImageFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple />
+        </label>
+        <div class="image-preview-card" id="modalImagePreview">
+          <span>Sin imágenes seleccionadas.</span>
+        </div>
+      </div>
+
       <label class="full">Notas
         <textarea id="modalNotes" readonly></textarea>
       </label>
@@ -290,6 +344,23 @@
         <button type="button" class="secondary" id="discardModal">Cancelar</button>
         <button type="submit">Guardar</button>
       </footer>
+    </form>
+  </dialog>
+
+  <dialog id="imagePreviewModal" class="modal image-preview-modal">
+    <form method="dialog">
+      <header class="modal-header">
+        <div>
+          <h2 id="imagePreviewTitle">Vista previa de imagen</h2>
+          <p id="imagePreviewSubtitle"></p>
+        </div>
+        <button type="submit" class="secondary">Cerrar</button>
+      </header>
+      <div class="image-preview-large" id="imagePreviewImages">
+      </div>
+      <label class="full">Texto / caption que se enviará
+        <textarea id="imagePreviewCaption" readonly></textarea>
+      </label>
     </form>
   </dialog>
 

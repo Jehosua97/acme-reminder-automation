@@ -40,7 +40,10 @@ function Es-Error-Infraestructura([string]$Texto) {
         $Texto -match 'Target closed' -or
         $Texto -match 'Execution context was destroyed' -or
         $Texto -match 'WebSocket' -or
-        $Texto -match 'disconnected'
+        $Texto -match 'disconnected' -or
+        $Texto -match 'browser is already running' -or
+        $Texto -match 'userDataDir' -or
+        $Texto -match 'session-recordatorios-excel'
     )
 }
 

@@ -19,7 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const qrcode = require('qrcode-terminal');
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const { rowsForSender, applySendResults } = require('./data_store');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -77,6 +77,62 @@ let cicloServicioEnCurso = false;
 
 function texto(valor) {
   return valor === undefined || valor === null ? '' : String(valor);
+}
+
+function rutaMediaAbsoluta(mediaPath) {
+  const value = texto(mediaPath).trim();
+  if (!value) return '';
+  return path.isAbsolute(value) ? value : path.join(PROJECT_ROOT, value);
+}
+
+function mediaItemsFila(fila = {}) {
+  const items = Array.isArray(fila.mediaItems) ? fila.mediaItems : [];
+  const normalized = items
+    .map((item) => ({
+      mediaPath: texto(item?.mediaPath).trim(),
+      mediaName: texto(item?.mediaName).trim(),
+      mediaMime: texto(item?.mediaMime).trim(),
+    }))
+    .filter((item) => item.mediaPath);
+
+  if (!normalized.length && texto(fila.mediaPath).trim()) {
+    normalized.push({
+      mediaPath: texto(fila.mediaPath).trim(),
+      mediaName: texto(fila.mediaName).trim(),
+      mediaMime: texto(fila.mediaMime).trim(),
+    });
+  }
+
+  return normalized;
+}
+
+function descripcionMediaFila(fila = {}) {
+  const items = mediaItemsFila(fila);
+  if (!items.length) return '';
+  const nombres = items.map((item) => item.mediaName || item.mediaPath).filter(Boolean);
+  if (items.length === 1) return `[Imagen: ${nombres[0] || 'imagen'}] `;
+  return `[${items.length} imagenes: ${nombres.slice(0, 5).join(', ')}${nombres.length > 5 ? ', ...' : ''}] `;
+}
+
+async function enviarFila(chatId, fila) {
+  const mediaItems = mediaItemsFila(fila);
+  if (mediaItems.length) {
+    const enviados = [];
+    for (let i = 0; i < mediaItems.length; i += 1) {
+      const item = mediaItems[i];
+      const mediaFile = rutaMediaAbsoluta(item.mediaPath);
+      if (!fs.existsSync(mediaFile)) {
+        throw new Error(`No existe la imagen configurada: ${mediaFile}`);
+      }
+      const media = MessageMedia.fromFilePath(mediaFile);
+      const enviado = await client.sendMessage(chatId, media, {
+        caption: i === 0 ? texto(fila.mensaje).trim() : '',
+      });
+      enviados.push(enviado);
+    }
+    return enviados[enviados.length - 1];
+  }
+  return client.sendMessage(chatId, fila.mensaje);
 }
 
 function normalizar(valor) {
@@ -532,7 +588,7 @@ async function procesarFilas(filas) {
     }
 
     try {
-      const enviado = await client.sendMessage(coincidencias[0].id, fila.mensaje);
+      const enviado = await enviarFila(coincidencias[0].id, fila);
       const ack = await esperarConfirmacionMensaje(enviado);
 
       if (ack >= ACK_MINIMO_CONFIRMADO) {
@@ -544,7 +600,7 @@ async function procesarFilas(filas) {
           ok: true,
           estado: 'ENVIADO',
           fecha,
-          nota: `${fecha} | ${fila.categoria} | ${fila.mensaje}`,
+          nota: `${fecha} | ${fila.categoria} | ${descripcionMediaFila(fila)}${fila.mensaje}`,
           ocurrencia,
           grupo: fila.grupo,
           categoria: fila.categoria,
@@ -753,7 +809,12 @@ process.on('uncaughtException', (error) => {
 
 process.on('unhandledRejection', (error) => {
   const mensaje = mensajeError(error);
-  finalizar(false, `Promesa rechazada: ${mensaje}`);
+  const perfilOcupado = /browser is already running|userDataDir|running browser/i.test(mensaje);
+  finalizar(
+    false,
+    `Promesa rechazada: ${mensaje}`,
+    MODO_SERVICIO && perfilOcupado ? CODIGO_REINICIO_WHATSAPP : 1
+  );
 });
 
 temporizadorInicializacion = setTimeout(() => {

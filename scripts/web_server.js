@@ -23,6 +23,7 @@ const {
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const RUNTIME = path.join(PROJECT_ROOT, 'runtime');
 const WEB_ROOT = path.join(PROJECT_ROOT, 'web');
+const UPLOAD_ROOT = path.join(PROJECT_ROOT, 'data', 'uploads');
 const PAUSE_FILE = path.join(RUNTIME, 'sistema_pausado.flag');
 const START_BACKGROUND_SCRIPT = path.join(__dirname, 'IniciarServicioWhatsAppBackground.ps1');
 const STOP_SCRIPT = path.join(__dirname, 'DetenerServicioWhatsApp.ps1');
@@ -30,8 +31,45 @@ const STOP_SCRIPT = path.join(__dirname, 'DetenerServicioWhatsApp.ps1');
 const PORT = Number(process.env.PORT || 3000);
 const app = express();
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '18mb' }));
 app.use(express.static(WEB_ROOT));
+app.use('/uploads', express.static(UPLOAD_ROOT));
+
+function safeImageExtension(mime, originalName = '') {
+  const lower = String(originalName || '').toLowerCase();
+  if (mime === 'image/jpeg' || lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return '.jpg';
+  if (mime === 'image/png' || lower.endsWith('.png')) return '.png';
+  if (mime === 'image/webp' || lower.endsWith('.webp')) return '.webp';
+  if (mime === 'image/gif' || lower.endsWith('.gif')) return '.gif';
+  return '';
+}
+
+function saveUploadedImage(body = {}) {
+  const dataUrl = String(body.dataUrl || '');
+  const match = dataUrl.match(/^data:(image\/(?:png|jpe?g|webp|gif));base64,([A-Za-z0-9+/=]+)$/i);
+  if (!match) throw new Error('Imagen invalida. Usa PNG, JPG, WEBP o GIF.');
+
+  const mime = match[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : match[1].toLowerCase();
+  const extension = safeImageExtension(mime, body.name);
+  if (!extension) throw new Error('Formato de imagen no soportado.');
+
+  const buffer = Buffer.from(match[2], 'base64');
+  const maxBytes = 12 * 1024 * 1024;
+  if (!buffer.length) throw new Error('La imagen esta vacia.');
+  if (buffer.length > maxBytes) throw new Error('La imagen es demasiado grande. Maximo 12 MB.');
+
+  if (!fs.existsSync(UPLOAD_ROOT)) fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
+  const basename = `image-${Date.now()}-${Math.random().toString(16).slice(2)}${extension}`;
+  const fullPath = path.join(UPLOAD_ROOT, basename);
+  fs.writeFileSync(fullPath, buffer);
+
+  return {
+    mediaPath: path.relative(PROJECT_ROOT, fullPath).replace(/\\/g, '/'),
+    mediaName: String(body.name || basename).trim() || basename,
+    mediaMime: mime,
+    mediaUrl: `/uploads/${encodeURIComponent(basename)}`,
+  };
+}
 
 function tail(file, lines = 120) {
   const full = path.join(RUNTIME, file);
@@ -121,6 +159,14 @@ app.post('/api/settings', (req, res) => {
 app.post('/api/reminders', (req, res) => {
   try {
     res.json({ ok: true, workbook: createReminder(req.body || {}) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/uploads/image', (req, res) => {
+  try {
+    res.json({ ok: true, image: saveUploadedImage(req.body || {}) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -3,6 +3,7 @@ node_modules/
 .wwebjs_cache/
 runtime/
 data/reminders.json
+data/uploads/
 data/backups/
 tools/
 
