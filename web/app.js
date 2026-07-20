@@ -8,6 +8,7 @@ const state = {
   modalMode: 'edit',
   categoryMenuOpen: false,
   houseMenuOpen: false,
+  modalSelectedHouses: new Set(),
   saveTimers: new Map(),
   savingRows: new Set(),
   selectedRows: new Set(),
@@ -23,6 +24,10 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const IMAGE_CATEGORY = 'Imagenes';
+const SPECIAL_OPT_IN_HOUSES = new Set([
+  '3 Gatsby Sq Brampton',
+  '7072 Magic Crt Mississauga ON',
+]);
 const DEFAULT_TIME_STEP_MINUTES = 30;
 const SORT_COLUMNS = [
   { index: 1, key: 'group', label: 'Casa' },
@@ -443,9 +448,56 @@ function setModalHouse(value) {
   $('houseComboLabel').textContent = value || 'Seleccionar casa';
 }
 
+function updateModalHouseLabel() {
+  if (state.modalMode !== 'add') {
+    $('houseComboLabel').textContent = $('modalGroup').value || 'Seleccionar casa';
+    return;
+  }
+  const count = state.modalSelectedHouses.size;
+  if (!count) {
+    $('modalGroup').value = '';
+    $('houseComboLabel').textContent = 'Seleccionar casas';
+    return;
+  }
+  const houses = [...state.modalSelectedHouses];
+  $('modalGroup').value = houses[0] || '';
+  $('houseComboLabel').textContent = count === 1 ? houses[0] : `${count} casas seleccionadas`;
+}
+
+function setModalSelectedHouses(houses) {
+  state.modalSelectedHouses = new Set((houses || []).filter(Boolean));
+  updateModalHouseLabel();
+}
+
 function renderHouseCombo() {
   const selected = $('modalGroup').value;
   const houses = [...new Set(state.houses.filter(Boolean))].sort();
+  if (state.modalMode === 'add') {
+    $('houseComboMenu').innerHTML = `
+      <div class="combo-actions">
+        <button type="button" class="combo-mini" data-house-action="select-all">Seleccionar todo</button>
+        <button type="button" class="combo-mini secondary" data-house-action="clear-all">Deseleccionar todo</button>
+      </div>
+      <button type="button" class="combo-item add-category" data-house-action="add">+ Agregar nueva casa</button>
+      ${houses.map((house) => {
+        const checked = state.modalSelectedHouses.has(house);
+        const special = SPECIAL_OPT_IN_HOUSES.has(house);
+        return `
+          <label class="combo-row multi-house-row ${checked ? 'selected' : ''} ${special ? 'special-house' : ''}">
+            <input type="checkbox" data-house-action="toggle" data-house="${escapeHtml(house)}" ${checked ? 'checked' : ''} />
+            <span class="combo-item-text">
+              ${escapeHtml(house)}
+              ${special ? '<small>Uso especial · no se selecciona con “todo”</small>' : ''}
+            </span>
+          </label>
+        `;
+      }).join('')}
+      <div class="combo-help">“Seleccionar todo” omite las casas de uso especial. Puedes marcarlas manualmente si de verdad aplica.</div>
+    `;
+    $('houseCombo').classList.toggle('open', state.houseMenuOpen);
+    return;
+  }
+
   $('houseComboMenu').innerHTML = `
     <button type="button" class="combo-item add-category" data-house-action="add">+ Agregar nueva casa</button>
     ${houses.map((house) => `
@@ -1262,8 +1314,8 @@ function openAddModal() {
   $('modalScheduleType').disabled = false;
   $('modalMessage').readOnly = false;
   $('modalTitle').textContent = 'Agregar recordatorio';
-  $('modalSubtitle').textContent = 'Se creará un nuevo recordatorio.';
-  setModalHouse(state.houses[0] || '');
+  $('modalSubtitle').textContent = 'Selecciona una o varias casas para crear el recordatorio masivamente.';
+  setModalSelectedHouses([]);
   state.houseMenuOpen = false;
   renderHouseCombo();
   setModalCategory(state.categories[0] || '');
@@ -1312,8 +1364,11 @@ async function saveModal() {
   }
 
   const payload = payloadFromModal();
-  if (!payload.group) {
-    toast('La casa / grupo exacto no puede quedar vacío.');
+  const selectedHouses = state.modalMode === 'add'
+    ? [...state.modalSelectedHouses]
+    : [payload.group].filter(Boolean);
+  if (!selectedHouses.length) {
+    toast(state.modalMode === 'add' ? 'Selecciona al menos una casa.' : 'La casa / grupo exacto no puede quedar vacío.');
     return;
   }
   if (isImageCategory(payload.category) && !payload.mediaItems.length) {
@@ -1333,25 +1388,28 @@ async function saveModal() {
     state.refreshPaused = false;
     const filters = captureFilters();
     try {
-      const data = await api('/api/cleaning-rotations', {
-        method: 'POST',
-        body: JSON.stringify({
-          house: payload.group,
-          enabled: payload.activo === 'SI',
-          roomCount: Number($('modalCleaningRoomCount').value || 1),
-          currentRoom: Number($('modalCleaningCurrentRoom').value || 1),
-          currentResponsibleRoom: cleaningResponsibleRoom({
+      let data = null;
+      for (const house of selectedHouses) {
+        data = await api('/api/cleaning-rotations', {
+          method: 'POST',
+          body: JSON.stringify({
+            house,
+            enabled: payload.activo === 'SI',
             roomCount: Number($('modalCleaningRoomCount').value || 1),
             currentRoom: Number($('modalCleaningCurrentRoom').value || 1),
+            currentResponsibleRoom: cleaningResponsibleRoom({
+              roomCount: Number($('modalCleaningRoomCount').value || 1),
+              currentRoom: Number($('modalCleaningCurrentRoom').value || 1),
+            }),
+            sendDay: selectedModalWeeklyDay(),
+            hora: payload.hora,
+            language: 'both',
+            messageTemplate: payload.mensaje,
           }),
-          sendDay: selectedModalWeeklyDay(),
-          hora: payload.hora,
-          language: 'both',
-          messageTemplate: payload.mensaje,
-        }),
-      });
-      updateStateFromWorkbook(data.workbook, filters);
-      toast('Rotación de limpieza agregada.');
+        });
+      }
+      if (data?.workbook) updateStateFromWorkbook(data.workbook, filters);
+      toast(selectedHouses.length === 1 ? 'Rotación de limpieza agregada.' : `Se crearon ${selectedHouses.length} rotaciones de limpieza.`);
     } catch (error) {
       toast(`Error agregando rotación: ${error.message}`);
     }
@@ -1384,12 +1442,15 @@ async function saveModal() {
   if (state.modalMode === 'add') {
     const filters = captureFilters();
     try {
-      const data = await api('/api/reminders', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      updateStateFromWorkbook(data.workbook, filters);
-      toast('Recordatorio agregado.');
+      let data = null;
+      for (const house of selectedHouses) {
+        data = await api('/api/reminders', {
+          method: 'POST',
+          body: JSON.stringify({ ...payload, group: house, filtrarCasa: house }),
+        });
+      }
+      if (data?.workbook) updateStateFromWorkbook(data.workbook, filters);
+      toast(selectedHouses.length === 1 ? 'Recordatorio agregado.' : `Se crearon ${selectedHouses.length} recordatorios.`);
     } catch (error) {
       toast(`Error agregando recordatorio: ${error.message}`);
     }
@@ -2020,6 +2081,30 @@ $('houseComboMenu').addEventListener('click', async (event) => {
   if (!button) return;
   const action = button.dataset.houseAction;
 
+  if (state.modalMode === 'add') {
+    if (action === 'select-all') {
+      setModalSelectedHouses(state.houses.filter((house) => house && !SPECIAL_OPT_IN_HOUSES.has(house)));
+      renderHouseCombo();
+      return;
+    }
+
+    if (action === 'clear-all') {
+      setModalSelectedHouses([]);
+      renderHouseCombo();
+      return;
+    }
+
+    if (action === 'toggle') {
+      const house = button.dataset.house || '';
+      if (!house) return;
+      if (button.checked) state.modalSelectedHouses.add(house);
+      else state.modalSelectedHouses.delete(house);
+      updateModalHouseLabel();
+      renderHouseCombo();
+      return;
+    }
+  }
+
   if (action === 'select') {
     setModalHouse(button.dataset.house || '');
     toggleHouseCombo(false);
@@ -2031,7 +2116,12 @@ $('houseComboMenu').addEventListener('click', async (event) => {
     const value = (nueva || '').trim();
     if (!value) return;
     if (!state.houses.includes(value)) state.houses.push(value);
-    setModalHouse(value);
+    if (state.modalMode === 'add') {
+      state.modalSelectedHouses.add(value);
+      updateModalHouseLabel();
+    } else {
+      setModalHouse(value);
+    }
     toggleHouseCombo(false);
     toast('Casa agregada al selector. Se guardará cuando guardes el recordatorio.');
     return;

@@ -818,6 +818,61 @@ pre {
 .combo-row.selected {
   background: #eff6ff;
 }
+.combo-actions {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  margin: -6px -6px 6px;
+  background: white;
+  border-bottom: 1px solid var(--line);
+}
+.combo-mini {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--blue);
+  color: white;
+  font-size: 12px;
+}
+.combo-mini.secondary {
+  background: #475569;
+}
+.multi-house-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
+  cursor: pointer;
+  padding: 8px 10px;
+}
+.multi-house-row input {
+  width: auto;
+  min-width: 0;
+  margin-top: 3px;
+}
+.combo-item-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.combo-item-text small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.combo-row.special-house {
+  background: #fff7ed;
+  border-left: 3px solid #f97316;
+}
+.combo-row.special-house.selected {
+  background: #ffedd5;
+}
+.combo-help {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  border-top: 1px solid var(--line);
+}
 .combo-item {
   width: 100%;
   text-align: left;
