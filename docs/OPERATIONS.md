@@ -1,134 +1,97 @@
-# Confort Place Operations and Debugging Guide
+# Confort Place Operations Guide
 
-This guide explains how to operate and troubleshoot the Confort Place WhatsApp reminder automation.
+This guide covers the current production model: web dashboard, JSON data store, persistent WhatsApp worker, and NSSM Windows services.
 
-## Daily commands
+Legacy Excel and Windows Task Scheduler scripts were removed from `main`. They remain available in:
+
+```text
+legacy-with-excel-scripts
+```
+
+## Daily operations
 
 | Action | Command |
 | --- | --- |
-| Start web admin interface | `.\scripts\IniciarWebAdmin.cmd` |
-| Start persistent WhatsApp service | `.\scripts\IniciarServicioWhatsApp.cmd` |
-| Stop persistent WhatsApp service | `.\scripts\DetenerServicioWhatsApp.cmd` |
-| Manual send from CLI | `npm run send` |
-| One-shot automatic run | `npm run send:auto` |
-| Persistent service from CLI | `npm run service` |
+| Open dashboard | `http://localhost:3000` |
+| Start dashboard manually | `npm run web` |
+| Start WhatsApp worker manually | `npm run service` |
+| Stop WhatsApp worker | `.\scripts\DetenerServicioWhatsApp.cmd` |
+| Enable debug mode | `.\scripts\ActivarModoDebug.cmd` |
+| Enable production mode | `.\scripts\ActivarModoProduccion.cmd` |
+| Verify Windows services | `.\scripts\VerificarServiciosNSSM.cmd` |
+| Restart Windows services | `.\scripts\ReiniciarServiciosNSSM.cmd` |
+| Repair Windows services | `.\scripts\RepararServiciosNSSM.cmd` |
+| Reset Windows services | `.\scripts\ResetServiciosNSSM.cmd` |
 
 ## Runtime model
 
 ```text
 Web dashboard
--> Local API
--> Reminder storage
--> WhatsApp sender service
--> WhatsApp Web
+-> Express API
+-> data/reminders.json
+-> WhatsApp worker
+-> whatsapp-web.js
+-> WhatsApp Web groups
 ```
 
-The dashboard and the sender service use the same local reminder records.
+The dashboard and sender use the same JSON reminder records.
 
-## Reminder fields
+## Reminder data
+
+Reminder data is stored locally in:
+
+```text
+data/reminders.json
+```
+
+This file is intentionally ignored by git because it contains real operational data.
+
+Important fields:
 
 | Field | Purpose |
 | --- | --- |
-| `id` | Stable reminder identifier used by the app and sender logs. |
-| `group` | Exact WhatsApp group name. Must match WhatsApp Web exactly. |
-| `category` | Reminder category shown in the UI. |
-| `scheduleType` | `weekly`, `monthly`, or `interval`. Existing reminders default to `weekly`. |
+| `id` | Stable reminder identifier used by logs and duplicate protection. |
+| `group` | Exact WhatsApp group name. |
+| `category` | UI category. |
+| `scheduleType` | `weekly`, `monthly`, or `interval`. |
 | `days` | Weekday schedule for weekly reminders. |
-| `monthly` | Week-of-month and weekday schedule for monthly reminders. |
-| `interval` | Base date and repeat interval in weeks for alternating schedules. |
-| `hora` | Scheduled send time, e.g. `19:00`. |
-| `activo` | `SI` or `NO`. Only active reminders are sent automatically. |
-| `enviarManual` | `SI` or `NO`. Manual sends use this flag. |
-| `estado` | Weekly result status. Resets to `PENDIENTE` after Sunday night. |
+| `monthly` | Week-of-month and weekday schedule. |
+| `interval` | Base date and repeat interval in weeks. |
+| `hora` | Scheduled send time. |
+| `activo` | `SI` or `NO`. Only `SI` sends automatically. |
+| `estado` | Current weekly result status. |
 | `ultimoEnvio` | Last successful send timestamp. |
-| `mensaje` | WhatsApp message body. |
+| `mensaje` | WhatsApp text/caption. |
+| `mediaItems` | Optional image attachments for image reminders. |
 | `notas` | Last operational note/result. |
 
-## Web admin interface
+## Dashboard
 
-Start it:
-
-```powershell
-.\scripts\IniciarWebAdmin.cmd
-```
-
-Open:
-
-```text
-http://localhost:3000
-```
-
-The web UI supports:
+The dashboard supports:
 
 - filtering by multiple houses;
-- adding reminders;
-- editing reminders inline;
-- editing full details from the popup;
-- weekly schedules;
-- monthly schedules such as first Friday, first/third Saturday, or second/fourth Saturday;
-- interval schedules such as every 2 weeks from a known base date;
-- selecting multiple rows and deleting them together;
-- deleting single reminders;
-- adding/removing houses and categories;
-- pausing/resuming the system;
-- starting/stopping/restarting the WhatsApp service;
-- viewing logs and runtime status.
+- adding/editing/deleting reminders;
+- inline autosave;
+- weekly, monthly, and interval schedules;
+- rotating cleaning reminders by room;
+- image reminders with multiple attachments;
+- bulk activate/deactivate/delete;
+- service status and logs;
+- debug/production mode controls.
 
-## Weekly result reset
-
-The `Resultado` column is weekly.
-
-Every Sunday night at 22:00 local time, the system resets reminder results to:
-
-```text
-PENDIENTE
-```
-
-If the service or dashboard is not open at exactly that time, the reset runs the next time the system starts or reads the reminder records.
-
-The reset does not delete:
-
-- last send timestamp;
-- notes;
-- schedules;
-- active/inactive state;
-- runtime logs.
-
-## WhatsApp service
-
-The persistent service keeps WhatsApp Web open through `whatsapp-web.js` and checks for due reminders on each cycle.
-
-Default environment values:
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `INTERVALO_SERVICIO_MS` | `300000` | Service review interval: every 5 minutes. |
-| `VENTANA_AUTO_MINUTOS` | `10` | Due-send tolerance window: 10 minutes. |
-
-The current mode is stored in `data/settings.json`.
+## Modes
 
 | Mode | Review interval | Send window | Time selector |
 | --- | ---: | ---: | ---: |
 | Debug | 2 minutes | 3 minutes | every minute |
 | Production | 5 minutes | 10 minutes | every 30 minutes |
 
-Use the dashboard buttons in `Estado del sistema`, or run:
+Use debug mode for short live tests. Use production mode for normal operation.
 
-```powershell
-.\scripts\ActivarModoDebug.cmd
-.\scripts\ActivarModoProduccion.cmd
-```
+Settings are stored in:
 
-To run:
-
-```powershell
-.\scripts\IniciarServicioWhatsApp.cmd
-```
-
-To stop:
-
-```powershell
-.\scripts\DetenerServicioWhatsApp.cmd
+```text
+data/settings.json
 ```
 
 ## Logs and status
@@ -144,10 +107,10 @@ runtime/envios_programados_log.tsv
 
 | File | Meaning |
 | --- | --- |
-| `servicio_programados.log` | Persistent service startup and Node output. |
+| `servicio_programados.log` | Persistent worker startup and Node output. |
 | `estado_programados.txt` | Last high-level status: `OK` or `ERROR`. |
 | `resultados_programados.tsv` | Last send attempt results. |
-| `envios_programados_log.tsv` | Anti-duplicate log for scheduled sends. |
+| `envios_programados_log.tsv` | Anti-duplicate log for successful scheduled sends. |
 
 ## Duplicate protection
 
@@ -157,43 +120,68 @@ Scheduled sends use this occurrence key:
 reminderId|yyyy-mm-dd hh:mm
 ```
 
-Successful automatic sends are recorded in `runtime/envios_programados_log.tsv`.
+If the worker restarts inside the send window, already-confirmed sends are skipped.
 
-If the service restarts inside the tolerance window, it checks that log and skips already-sent occurrences.
+## Weekly result reset
 
-## Debug checklist
+The `Resultado` status resets weekly.
 
-### 1. Is the service running?
+Every Sunday at 22:00 local time, reminder results reset to:
 
-```powershell
-Get-Content runtime\servicio_programados.lock
+```text
+PENDIENTE
 ```
 
-Then verify the PID:
+If the system is not running at exactly that time, the reset runs the next time reminder data is read.
 
-```powershell
-Get-Process -Id <PID>
+## WhatsApp session
+
+The WhatsApp login is stored in:
+
+```text
+.wwebjs_auth/
 ```
 
-### 2. What was the last status?
+Do not commit or share this folder.
+
+If WhatsApp asks for QR again:
 
 ```powershell
-Get-Content runtime\estado_programados.txt
+npm run service
 ```
 
-### 3. Did the sender select any reminders?
+Then scan the QR from:
+
+```text
+WhatsApp mobile app -> Linked devices -> Link a device
+```
+
+## Common failures
+
+### Group not found
+
+The configured `group` must match the WhatsApp group name exactly.
+
+### Service says browser profile is already running
+
+This usually means a previous Chromium instance is still holding the WhatsApp Web profile. Use:
 
 ```powershell
-Get-Content runtime\resultados_programados.tsv
+.\scripts\DetenerServicioWhatsApp.cmd
+.\scripts\ActivarModoProduccion.cmd
 ```
 
-### 4. Was a reminder skipped as duplicate?
+If it continues, run the dashboard as admin or repair services:
 
 ```powershell
-Get-Content runtime\envios_programados_log.tsv
+.\scripts\RepararServiciosNSSM.cmd
 ```
 
-### 5. Is WhatsApp disconnected?
+### PC slept during a send window
+
+Sleep/hibernate prevents reliable sending. Keep the PC plugged in, awake, and connected to the internet.
+
+### WhatsApp disconnected
 
 Check:
 
@@ -204,6 +192,38 @@ Get-Content runtime\servicio_programados.log -Tail 120
 Common causes:
 
 - WhatsApp Web session expired.
-- PC slept or lost network.
-- WhatsApp group name changed.
-- The linked phone/account was logged out.
+- The phone/account was unlinked.
+- Network instability.
+- PC sleep/hibernate.
+
+## Service management
+
+Install services:
+
+```powershell
+.\scripts\InstalarServiciosNSSM.cmd
+```
+
+Verify:
+
+```powershell
+.\scripts\VerificarServiciosNSSM.cmd
+```
+
+Restart:
+
+```powershell
+.\scripts\ReiniciarServiciosNSSM.cmd
+```
+
+Repair:
+
+```powershell
+.\scripts\RepararServiciosNSSM.cmd
+```
+
+Reset:
+
+```powershell
+.\scripts\ResetServiciosNSSM.cmd
+```

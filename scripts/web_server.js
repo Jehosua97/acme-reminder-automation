@@ -79,11 +79,7 @@ function tail(file, lines = 120) {
     .split(/\r?\n/)
     .filter((line) => (
       !/Data source:/i.test(line) &&
-      !/Archivo:\s*.*RecordatoriosWhatsApp/i.test(line) &&
-      !/workbooks\\RecordatoriosWhatsApp/i.test(line) &&
-      !/UPDATE EXCEL/i.test(line) &&
-      !/Excel actualizado/i.test(line) &&
-      !/actualiza Excel/i.test(line)
+      !/Archivo:\s*.*RecordatoriosWhatsApp/i.test(line)
     ))
     .slice(-lines)
     .join('\n');
