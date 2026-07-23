@@ -172,6 +172,10 @@ function fechaLarga(fecha) {
   return `${DIAS[fecha.getDay()][1]} ${pad2(fecha.getDate())}/${MESES[fecha.getMonth()]}/${fecha.getFullYear()} ${pad2(fecha.getHours())}:${pad2(fecha.getMinutes())} hrs`;
 }
 
+function claveFechaHora(fecha) {
+  return `${fecha.getFullYear()}-${pad2(fecha.getMonth() + 1)}-${pad2(fecha.getDate())} ${pad2(fecha.getHours())}:${pad2(fecha.getMinutes())}`;
+}
+
 function parseHora(hora) {
   const value = normalizeHora(hora);
   if (!value) return { h: 9, m: 0 };
@@ -315,6 +319,7 @@ function normalizeReminder(input = {}, fallbackId = 1) {
     activo: text(input.activo || 'NO').trim().toUpperCase() === 'SI' ? 'SI' : 'NO',
     enviarManual: text(input.enviarManual || 'NO').trim().toUpperCase() === 'SI' ? 'SI' : 'NO',
     estado: text(input.estado || 'PENDIENTE').trim() || 'PENDIENTE',
+    statusCycleKey: text(input.statusCycleKey).trim(),
     ultimoEnvio: text(input.ultimoEnvio).trim(),
     mensaje: text(input.mensaje),
     mediaItems,
@@ -390,7 +395,7 @@ function readStoreRaw() {
     cleaningRotations,
     reminders: normalized,
   };
-  return applyWeeklyStatusResetIfDue(store);
+  return applyStatusResetIfDue(store);
 }
 
 function writeStore(store) {
@@ -415,17 +420,98 @@ function writeStore(store) {
   return clean;
 }
 
-function applyWeeklyStatusResetIfDue(store, now = new Date()) {
-  const threshold = weeklyStatusResetThreshold(now);
-  const thresholdIso = threshold.toISOString();
-  if (text(store.lastWeeklyStatusReset) === thresholdIso) return store;
+function weeklyStatusCycleKey(reminder, now = new Date()) {
+  return `${reminder.id}|weekly|${weeklyStatusResetThreshold(now).toISOString()}`;
+}
 
-  store.reminders = (store.reminders || []).map((r) => ({
-    ...r,
-    estado: 'PENDIENTE',
-  }));
-  store.lastWeeklyStatusReset = thresholdIso;
-  return writeStore(store);
+function occurrenceStatusCycleKey(reminder, occurrenceDate) {
+  return `${reminder.id}|${claveFechaHora(occurrenceDate)}`;
+}
+
+function statusCycleStartForOccurrence(occurrenceDate) {
+  return weeklyStatusResetThreshold(occurrenceDate);
+}
+
+function scheduledMonthlyDateOnOrAfter(reminder, now = new Date()) {
+  const monthly = reminder.monthly || {};
+  if (!monthly.weekday || !Array.isArray(monthly.ordinals) || !monthly.ordinals.length) return null;
+  if (!reminder.hora) return null;
+
+  const { h, m } = parseHora(reminder.hora);
+  for (let offset = 0; offset < 370; offset += 1) {
+    const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, h, m, 0, 0);
+    const dayKey = DIAS[candidate.getDay()][0];
+    if (dayKey !== monthly.weekday) continue;
+    if (!monthly.ordinals.includes(monthlyOrdinalForDate(candidate))) continue;
+    return candidate;
+  }
+  return null;
+}
+
+function scheduledIntervalDateOnOrAfter(reminder, now = new Date()) {
+  const interval = reminder.interval || {};
+  if (!interval.startDate || !interval.everyWeeks) return null;
+  if (!reminder.hora) return null;
+
+  const startDate = parseDateOnly(interval.startDate);
+  if (!startDate) return null;
+
+  const { h, m } = parseHora(reminder.hora);
+  const stepDays = interval.everyWeeks * 7;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const base = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), h, m, 0, 0);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const baseDay = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  const diffDays = Math.floor((today.getTime() - baseDay.getTime()) / dayMs);
+  let cycles = Math.max(0, Math.floor(diffDays / stepDays) - 1);
+
+  while (cycles < 2000) {
+    const candidate = new Date(base);
+    candidate.setDate(base.getDate() + cycles * stepDays);
+    const candidateDay = new Date(candidate.getFullYear(), candidate.getMonth(), candidate.getDate());
+    if (candidateDay.getTime() >= today.getTime()) return candidate;
+    cycles += 1;
+  }
+  return null;
+}
+
+function statusCycleKeyForReminder(reminder, now = new Date()) {
+  if (reminder.activo !== 'SI' || !hasScheduledDay(reminder) || !reminder.hora) return '';
+
+  if (reminder.scheduleType === 'weekly') {
+    return weeklyStatusCycleKey(reminder, now);
+  }
+
+  const occurrenceDate = reminder.scheduleType === 'monthly'
+    ? scheduledMonthlyDateOnOrAfter(reminder, now)
+    : scheduledIntervalDateOnOrAfter(reminder, now);
+
+  if (!occurrenceDate) return '';
+  if (now.getTime() < statusCycleStartForOccurrence(occurrenceDate).getTime()) return '';
+  return occurrenceStatusCycleKey(reminder, occurrenceDate);
+}
+
+function applyStatusResetIfDue(store, now = new Date()) {
+  let changed = false;
+  const thresholdIso = weeklyStatusResetThreshold(now).toISOString();
+
+  store.reminders = (store.reminders || []).map((reminder) => {
+    const statusCycleKey = statusCycleKeyForReminder(reminder, now);
+    if (!statusCycleKey || reminder.statusCycleKey === statusCycleKey) return reminder;
+    changed = true;
+    return {
+      ...reminder,
+      estado: 'PENDIENTE',
+      statusCycleKey,
+    };
+  });
+
+  if (text(store.lastWeeklyStatusReset) !== thresholdIso) {
+    store.lastWeeklyStatusReset = thresholdIso;
+    changed = true;
+  }
+
+  return changed ? writeStore(store) : store;
 }
 
 function nextOccurrences(reminder, now = new Date()) {
@@ -886,6 +972,7 @@ function applySendResults(results) {
     const reminder = store.reminders.find((r) => r.id === id);
     if (!reminder) continue;
     reminder.estado = result.estado || (result.ok ? 'ENVIADO' : 'ERROR');
+    reminder.statusCycleKey = statusCycleKeyForReminder(reminder) || text(result.ocurrencia).trim() || reminder.statusCycleKey;
     if (result.ok) {
       reminder.ultimoEnvio = result.fecha || fechaLarga(new Date());
       reminder.notas = result.nota || reminder.notas;

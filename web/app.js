@@ -373,6 +373,17 @@ function restoreFilters(filters) {
   if ($('searchBox')) $('searchBox').value = filters.search || '';
 }
 
+function clearFilters() {
+  state.selectedHouses = new Set();
+  if ($('categoryFilter')) $('categoryFilter').value = '';
+  if ($('statusFilter')) $('statusFilter').value = '';
+  if ($('activeFilter')) $('activeFilter').value = '';
+  if ($('searchBox')) $('searchBox').value = '';
+  renderFilters();
+  renderReminders();
+  toast('Filtros borrados.');
+}
+
 function scheduleSortValue(r) {
   if (r.scheduleType === 'monthly') {
     return `monthly ${(r.monthly?.weekday || '')} ${(r.monthly?.ordinals || []).join('-')}`;
@@ -1970,6 +1981,7 @@ $('houseFilter').addEventListener('change', (event) => {
   $(id).addEventListener('input', () => scheduleRenderReminders(40));
 });
 $('searchBox').addEventListener('input', () => scheduleRenderReminders(180));
+$('clearFiltersBtn').addEventListener('click', clearFilters);
 
 $('reminderGrid').addEventListener('click', (event) => {
   const actionElement = event.target.closest('[data-action]');
