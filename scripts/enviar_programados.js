@@ -5,11 +5,11 @@
  *
  * Modo manual:
  *   node enviar_programados.js
- *   EnvÃ­a filas donde "Enviar manual" = SI.
+ *   Envía filas donde "Enviar manual" = SI.
  *
- * Modo automÃ¡tico:
+ * Modo automático:
  *   node enviar_programados.js --auto
- *   EnvÃ­a filas donde "Activo" = SI y ProgramaciÃ³n/Hora coinciden con el horario actual.
+ *   Envía filas donde "Activo" = SI y Programación/Hora coinciden con el horario actual.
  *
  * Este script actualiza el registro local de recordatorios y escribe:
  *   estado_programados.txt
@@ -198,10 +198,10 @@ function fechaEnvio(fecha = new Date()) {
     'domingo',
     'lunes',
     'martes',
-    'miÃ©rcoles',
+    'miércoles',
     'jueves',
     'viernes',
-    'sÃ¡bado',
+    'sábado',
   ];
   const meses = [
     'Ene',
@@ -256,7 +256,7 @@ function horaProgramada(hora) {
 function parseFechaProximoEnvio(linea) {
   const limpia = texto(linea).trim();
   const match = limpia.match(
-    /(\d{1,2})\/([A-Za-zÃÃ‰ÃÃ“ÃšÃœÃ‘Ã¡Ã©Ã­Ã³ÃºÃ¼Ã±]{3})\/(\d{4})\s+(\d{1,2}):(\d{2})\s+hrs/i
+    /(\d{1,2})\/([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3})\/(\d{4})\s+(\d{1,2}):(\d{2})\s+hrs/i
   );
 
   if (!match) return null;
@@ -527,7 +527,7 @@ async function procesarEnvios() {
 
   if (filas.length === 0) {
     const mensaje = MODO_AUTO
-      ? 'No hay recordatorios automÃ¡ticos pendientes en esta ventana.'
+      ? 'No hay recordatorios automáticos pendientes en esta ventana.'
       : 'No hay filas marcadas con Enviar manual = SI.';
     await finalizar(true, mensaje);
     return;
@@ -539,7 +539,7 @@ async function procesarEnvios() {
 }
 
 async function procesarFilas(filas) {
-  console.log(`Modo: ${MODO_SERVICIO ? 'SERVICIO' : MODO_AUTO ? 'AUTOMÃTICO' : 'MANUAL'}`);
+  console.log(`Modo: ${MODO_SERVICIO ? 'SERVICIO' : MODO_AUTO ? 'AUTOMÁTICO' : 'MANUAL'}`);
   console.log('Sistema de recordatorios: Confort Place');
   console.log(`Filas a enviar: ${filas.length}`);
   console.log('Cargando grupos de WhatsApp...');
@@ -563,12 +563,12 @@ async function procesarFilas(filas) {
         hoja: fila.hoja,
         ok: false,
         estado: 'ERROR',
-        nota: `No se encontrÃ³ el grupo exacto "${fila.grupo}".`,
+        nota: `No se encontró el grupo exacto "${fila.grupo}".`,
         ocurrencia,
         grupo: fila.grupo,
         categoria: fila.categoria,
       });
-      console.error(`[ERROR] No se encontrÃ³ "${fila.grupo}".`);
+      console.error(`[ERROR] No se encontró "${fila.grupo}".`);
       continue;
     }
 
@@ -616,7 +616,7 @@ async function procesarFilas(filas) {
           hoja: fila.hoja,
           ok: false,
           estado: 'PENDIENTE',
-          nota: `WhatsApp no confirmÃ³ en ${TIEMPO_MAXIMO_CONFIRMACION_MS / 1000}s ` +
+          nota: `WhatsApp no confirmó en ${TIEMPO_MAXIMO_CONFIRMACION_MS / 1000}s ` +
             `(ACK ${ack} ${nombreAck(ack)}).`,
           ocurrencia,
           grupo: fila.grupo,
@@ -705,7 +705,7 @@ if (!MODO_SERVICIO) try {
   filasPreseleccionadas = seleccionarFilas();
   if (filasPreseleccionadas.length === 0) {
     const mensaje = MODO_AUTO
-      ? 'No hay recordatorios automÃ¡ticos pendientes en esta ventana.'
+      ? 'No hay recordatorios automáticos pendientes en esta ventana.'
       : 'No hay filas marcadas con Enviar manual = SI.';
     console.log(mensaje);
     escribirEstado(true, mensaje);
@@ -768,12 +768,12 @@ client.on('qr', (qr) => {
 });
 
 client.on('authenticated', () => {
-  console.log('AutenticaciÃ³n correcta. Cargando WhatsApp...');
+  console.log('Autenticación correcta. Cargando WhatsApp...');
 });
 
 client.on('ready', () => {
   if (temporizadorInicializacion) clearTimeout(temporizadorInicializacion);
-  console.log('WhatsApp estÃ¡ listo.');
+  console.log('WhatsApp está listo.');
   try {
     if (client.pupPage) {
       client.pupPage.setDefaultTimeout(PUPPETEER_DEFAULT_TIMEOUT_MS);
@@ -792,13 +792,13 @@ client.on('ready', () => {
 });
 
 client.on('auth_failure', (mensaje) => {
-  finalizar(false, `FallÃ³ la autenticaciÃ³n: ${mensaje}`);
+  finalizar(false, `Falló la autenticación: ${mensaje}`);
 });
 
 client.on('disconnected', (razon) => {
   finalizar(
     false,
-    `WhatsApp se desconectÃ³: ${razon}`,
+    `WhatsApp se desconectó: ${razon}`,
     MODO_SERVICIO ? CODIGO_REINICIO_WHATSAPP : 1
   );
 });
