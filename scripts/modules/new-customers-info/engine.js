@@ -4,6 +4,7 @@ const { matchProperties } = require('./catalog');
 const { formatClock, formatDate } = require('./appointment-schedule');
 
 const START_COMMAND = 'start bot';
+const START_COMMAND_ALIASES = Object.freeze([START_COMMAND, 'iniciar bot', 'inciair bot', 'inicia bot']);
 const STOP_COMMAND = 'stop bot';
 
 function normalize(value) {
@@ -73,7 +74,7 @@ function prompt(language, key) {
 }
 
 function welcome() {
-  return 'Good morning, welcome to Confort Place. Would you like to be attended in English or Spanish?\n\nBuenos días, bienvenido a Confort Place. ¿Gusta atención en inglés o español?\n\nReply / Responda: English o Español.';
+  return 'Welcome to Confort Place. Would you like to be attended in English or Spanish?\n\nBienvenido a Confort Place. ¿Gusta atención en inglés o español?\n\nReply / Responda: English o Español.';
 }
 
 function invalid(language, key) {
@@ -107,31 +108,62 @@ function localizedRoom(room, language) {
   return original.replace(/^Room\b/i, 'Habitación');
 }
 
-function formatMatches(language, answers, matches) {
+function localizedCapacity(property, language) {
+  if (Number(property?.maxOccupants) >= 2) {
+    return language === 'en' ? 'For one person or a couple' : 'Para una persona o pareja';
+  }
+  return language === 'en' ? 'For one person' : 'Para una persona';
+}
+
+function locationOption(property, language) {
+  const room = localizedRoom(property.room, language);
+  const numberedRoom = /#\s*\d+/.test(room) ? ` - ${room}` : '';
+  return `${property.address} - ${localizedCapacity(property, language)}${numberedRoom}`;
+}
+
+function locationOptionsPrompt(language, matches) {
   if (!matches.length) {
     return language === 'en'
       ? 'Thank you. We do not currently have an exact match for those requirements.'
       : 'Gracias. Por el momento no tenemos una opción que coincida exactamente con esos requisitos.';
   }
   const intro = language === 'en'
-    ? `Thank you. These are the options that best fit your needs for ${answers.move_in_date}:`
-    : `Gracias. Estas son las opciones que mejor cumplen con sus necesidades para ${answers.move_in_date}:`;
-  const items = matches.map((property, index) => {
-    const parking = property.parkingSpaces > 0
-      ? (language === 'en' ? `${property.parkingSpaces} parking space(s)` : `${property.parkingSpaces} espacio(s) de estacionamiento`)
-      : (language === 'en' ? 'No parking' : 'Sin estacionamiento');
-    const price = `$${property.prices[answers.occupants].toLocaleString('en-CA')} CAD`;
-    return `*${index + 1}. ${property.address}*\n${localizedRoom(property.room, language)}\n${price}\n${parking}`;
-  });
-  return [intro, ...items].join('\n\n');
+    ? 'These are the available locations that match your needs:'
+    : 'Estas son las ubicaciones disponibles que cumplen con sus necesidades:';
+  const items = matches.map((property, index) => `${index + 1}. ${locationOption(property, language)}`);
+  const question = language === 'en'
+    ? 'Which location interests you most? Reply with its number.'
+    : '¿Cuál ubicación le interesa más? Responda con su número.';
+  return [intro, '', ...items, '', question].join('\n');
 }
 
-function mediaForMatches(language, answers, matches) {
-  return matches.flatMap((property) => (property.mediaItems || []).map((media) => ({
+function propertyPricing(language, answers, property) {
+  const price = (occupants) => `$${property.prices[occupants].toLocaleString('en-CA')} CAD`;
+  if (Number(property.maxOccupants) >= 2 && property.prices[1] && property.prices[2]) {
+    return language === 'en'
+      ? `Price for one person: *${price(1)}*\nPrice for a couple: *${price(2)}*`
+      : `Precio para una persona: *${price(1)}*\nPrecio para una pareja: *${price(2)}*`;
+  }
+  return language === 'en'
+    ? `Price for one person: *${price(answers.occupants)}*`
+    : `Precio para una persona: *${price(answers.occupants)}*`;
+}
+
+function selectedPropertyDetails(language, answers, property) {
+  const pricing = propertyPricing(language, answers, property);
+  return language === 'en'
+    ? `Here is the information for the room you selected:\n\n*${property.address}*\n${localizedRoom(property.room, 'en')}\n${pricing}`
+    : `Esta es la información de la habitación que seleccionó:\n\n*${property.address}*\n${localizedRoom(property.room, 'es')}\n${pricing}`;
+}
+
+function mediaForProperty(language, answers, property) {
+  return (property.mediaItems || []).map((media, index) => ({
     mediaPath: media.mediaPath,
     mediaName: media.mediaName,
-    body: `${property.address} - ${localizedRoom(property.room, language)} - $${property.prices[answers.occupants].toLocaleString('en-CA')} CAD`,
-  })));
+    body: index === 0
+      ? `${property.address}\n${localizedRoom(property.room, language)}\n${propertyPricing(language, answers, property)}`
+      : '',
+  }));
 }
 
 function nextActionPrompt(language, hasMatches) {
@@ -141,8 +173,8 @@ function nextActionPrompt(language, hasMatches) {
       : '¿Desea hablar con un miembro de nuestro equipo aquí en el chat? Responda PERSONA.';
   }
   return language === 'en'
-    ? 'Would you like to schedule a visit to one of these rooms?\n\nReply YES to schedule, NO to finish, or PERSON to speak with a team member here in the chat.'
-    : '¿Le gustaría agendar una visita a alguna de estas habitaciones?\n\nResponda SÍ para agendar, NO para finalizar o PERSONA para hablar con un miembro del equipo aquí en el chat.';
+    ? 'Would you like to schedule a visit to this room?\n\nReply YES to schedule, NO to finish, or PERSON to speak with a team member here in the chat.'
+    : '¿Le gustaría agendar una visita a esta habitación?\n\nResponda SÍ para agendar, NO para finalizar o PERSONA para hablar con un miembro del equipo aquí en el chat.';
 }
 
 function matchingOptions(contact, properties) {
@@ -151,7 +183,7 @@ function matchingOptions(contact, properties) {
 }
 
 function propertyPrompt(language, options) {
-  const list = options.map((property, index) => `${index + 1}. ${property.address} - ${localizedRoom(property.room, language)}`).join('\n');
+  const list = options.map((property, index) => `${index + 1}. ${locationOption(property, language)}`).join('\n');
   return language === 'en'
     ? `Which room would you like to visit? Reply with its number:\n\n${list}`
     : `¿Qué habitación desea visitar? Responda con su número:\n\n${list}`;
@@ -246,10 +278,12 @@ function handoffTransition(contact, answers, language) {
   };
 }
 
-function beginAppointment(contact, answers, language, properties, availability, initialText = '') {
+function beginAppointment(contact, answers, language, properties, availability, initialText = '', preferredPropertyId = '') {
   const options = matchingOptions(contact, properties);
   if (!options.length) return handoffTransition(contact, answers, language);
-  const selected = propertyChoice(initialText, options) || (options.length === 1 ? options[0] : null);
+  const selected = options.find((property) => property.id === preferredPropertyId)
+    || propertyChoice(initialText, options)
+    || (options.length === 1 ? options[0] : null);
   if (!selected) {
     return { ...contact, answers, currentFieldId: 'appointment_property', conversationStatus: 'ACTIVE', leadStatus: 'INTERESADO', outgoing: [propertyPrompt(language, options)], auditType: 'APPOINTMENT_STARTED' };
   }
@@ -283,10 +317,34 @@ function handleText(contact, incomingText, properties, appointmentAvailability) 
       return { ...contact, answers, currentFieldId: null, conversationStatus: 'COMPLETE', leadStatus: 'CITA_AGENDADA', outgoing: [appointmentSummary(contact.appointment, language)], auditType: 'APPOINTMENT_CANCELLATION_DECLINED' };
     }
     return {
-      ...contact, answers, currentFieldId: null, conversationStatus: 'COMPLETE', leadStatus: 'SEGUIMIENTO',
+      ...contact, answers: {}, matches: [], language: null, currentFieldId: null,
+      conversationStatus: 'COMPLETE', leadStatus: 'CITA_CANCELADA',
       appointmentAction: { type: 'CANCEL' },
+      resetConversationData: true,
       outgoing: [language === 'en' ? 'Your visit has been cancelled. If you need anything else, write to us again.' : 'Su visita fue cancelada. Si necesita algo más, puede volver a escribirnos.'],
       auditType: 'APPOINTMENT_CANCELLED',
+    };
+  }
+
+  if (field === 'property_interest') {
+    const options = matchingOptions(contact, properties);
+    const selected = propertyChoice(incomingText, options);
+    if (!selected) {
+      return { ...contact, answers, outgoing: [locationOptionsPrompt(language, options)], auditType: 'INVALID_ANSWER' };
+    }
+    answers.selected_property_id = selected.id;
+    const media = mediaForProperty(language, answers, selected);
+    return {
+      ...contact,
+      answers,
+      currentFieldId: 'next_action',
+      conversationStatus: 'ACTIVE',
+      leadStatus: 'INTERESADO',
+      outgoing: [
+        ...(media.length ? media : [selectedPropertyDetails(language, answers, selected)]),
+        nextActionPrompt(language, true),
+      ],
+      auditType: 'PROPERTY_INTEREST_SELECTED',
     };
   }
 
@@ -368,10 +426,18 @@ function handleText(contact, incomingText, properties, appointmentAvailability) 
     if (moveInDate.length < 3) return { ...contact, answers, outgoing: [invalid(language, 'moveIn')], auditType: 'INVALID_ANSWER' };
     answers.move_in_date = moveInDate;
     const matches = matchProperties(answers, properties);
+    if (!matches.length) {
+      return {
+        ...contact, answers, currentFieldId: 'next_action', conversationStatus: 'ACTIVE',
+        leadStatus: 'REQUIERE_ATENCION', matches,
+        outgoing: [locationOptionsPrompt(language, matches), nextActionPrompt(language, false)],
+        auditType: 'OPTIONS_MATCHED',
+      };
+    }
     return {
-      ...contact, answers, currentFieldId: 'next_action', conversationStatus: 'ACTIVE',
-      leadStatus: matches.length ? 'OPCIONES_ENVIADAS' : 'REQUIERE_ATENCION', matches,
-      outgoing: [formatMatches(language, answers, matches), ...mediaForMatches(language, answers, matches), nextActionPrompt(language, matches.length > 0)],
+      ...contact, answers, currentFieldId: 'property_interest', conversationStatus: 'ACTIVE',
+      leadStatus: 'OPCIONES_ENVIADAS', matches,
+      outgoing: [locationOptionsPrompt(language, matches)],
       auditType: 'OPTIONS_MATCHED',
     };
   }
@@ -381,7 +447,7 @@ function handleText(contact, incomingText, properties, appointmentAvailability) 
       return { ...contact, answers, currentFieldId: null, conversationStatus: 'COMPLETE', leadStatus: 'NO_INTERESADO', outgoing: [language === 'en' ? 'Thank you for contacting Confort Place. We are here if you need us later.' : 'Gracias por contactar a Confort Place. Aquí estaremos si nos necesita más adelante.'], auditType: 'LEAD_NOT_INTERESTED' };
     }
     if (isPositiveInterest(incomingText) || booleanFrom(incomingText) === true || propertyChoice(incomingText, matchingOptions(contact, properties))) {
-      return beginAppointment(contact, answers, language, properties, availability, incomingText);
+      return beginAppointment(contact, answers, language, properties, availability, incomingText, answers.selected_property_id);
     }
     return { ...contact, answers, outgoing: [nextActionPrompt(language, (contact.matchIds || []).length > 0)], auditType: 'INVALID_ANSWER' };
   }
@@ -401,4 +467,4 @@ function handleText(contact, incomingText, properties, appointmentAvailability) 
   return { ...contact, answers, leadStatus: 'REQUIERE_ATENCION', outgoing: [], auditType: 'STAFF_REVIEW_REQUESTED' };
 }
 
-module.exports = { START_COMMAND, STOP_COMMAND, activate, handleText, normalize };
+module.exports = { START_COMMAND, START_COMMAND_ALIASES, STOP_COMMAND, activate, handleText, normalize };

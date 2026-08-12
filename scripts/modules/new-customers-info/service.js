@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { MessageMedia } = require('whatsapp-web.js');
 const { NewCustomersStore } = require('./store');
-const { START_COMMAND, STOP_COMMAND, activate, handleText, normalize } = require('./engine');
+const { START_COMMAND_ALIASES, STOP_COMMAND, activate, handleText, normalize } = require('./engine');
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 
@@ -41,7 +41,10 @@ function maskedIdentity(value) {
 }
 
 function createNewCustomersService(options = {}) {
-  const filename = options.filename || path.resolve(PROJECT_ROOT, 'data/new-customers-info.sqlite');
+  const filename = options.filename || path.resolve(
+    PROJECT_ROOT,
+    process.env.NEW_CUSTOMERS_DB_FILE || 'data/new-customers-whatsapp.sqlite'
+  );
   const store = options.store || new NewCustomersStore(filename);
   let configuredTestMode = false;
   if (process.env.NEW_CUSTOMERS_TEST_MODE !== undefined) {
@@ -64,7 +67,9 @@ function createNewCustomersService(options = {}) {
     : String(options.adminNumbers || process.env.NEW_CUSTOMERS_ADMIN_NUMBERS || '4378781645').split(',');
   const adminNumbers = adminInput.map(normalizePhone).filter(Boolean);
   const mediaFactory = options.mediaFactory || ((filenameValue) => MessageMedia.fromFilePath(filenameValue));
+  const allowMissingMessageTimestamp = options.allowMissingMessageTimestamp === true;
   let flushQueue = Promise.resolve();
+  const isStartCommand = (value) => START_COMMAND_ALIASES.includes(normalize(value));
 
   function policyInfo() {
     return {
@@ -160,8 +165,7 @@ function createNewCustomersService(options = {}) {
   function handleIncoming({ chatId, text, messageId = '' }) {
     const contact = store.getContactByChat(chatId);
     if (!contact) return { ignored: true, reason: 'CONTACT_NOT_ACTIVATED' };
-    if (normalize(text) === START_COMMAND) {
-      if (!isAdminIdentity(chatId, contact)) return { ignored: true, reason: 'ADMIN_REQUIRED', contact };
+    if (isStartCommand(text) && isAdminIdentity(chatId, contact)) {
       return activateChat({
         chatId: contact.chatId,
         phoneE164: contact.phoneE164,
@@ -169,13 +173,16 @@ function createNewCustomersService(options = {}) {
         messageId,
       });
     }
-    if (normalize(text) === STOP_COMMAND) {
-      if (!isAdminIdentity(chatId, contact)) return { ignored: true, reason: 'ADMIN_REQUIRED', contact };
+    if (normalize(text) === STOP_COMMAND && isAdminIdentity(chatId, contact)) {
       return stopChat({ chatId, phoneE164: contact.phoneE164, messageId });
     }
     if (contact.conversationStatus === 'STOPPED_BY_ADMIN') return { ignored: true, reason: 'STOPPED_BY_ADMIN', contact };
     if (contact.conversationStatus === 'HANDOFF_REQUESTED') return { ignored: true, reason: 'HANDOFF_REQUESTED', contact };
-    if (contact.conversationStatus === 'COMPLETE' && contact.leadStatus === 'NO_INTERESADO' && !contact.appointment) {
+    const cancelledAppointment = contact.leadStatus === 'CITA_CANCELADA'
+      || (contact.leadStatus === 'SEGUIMIENTO'
+        && store.history(contact.id).some((event) => event.eventType === 'APPOINTMENT_CANCELLED'));
+    if (contact.conversationStatus === 'COMPLETE' && !contact.appointment
+        && (contact.leadStatus === 'NO_INTERESADO' || cancelledAppointment)) {
       return activateChat({
         chatId: contact.chatId,
         phoneE164: contact.phoneE164,
@@ -218,6 +225,12 @@ function createNewCustomersService(options = {}) {
 
   function attach(client) {
     const chatLocks = new Map();
+    let readyAtUnix = 0;
+    const isLiveEvent = (message) => {
+      const timestamp = Number(message?.timestamp || 0);
+      if (!timestamp) return allowMissingMessageTimestamp;
+      return readyAtUnix > 0 && timestamp >= readyAtUnix - 5;
+    };
     const serialize = (chatId, work) => {
       const previous = chatLocks.get(chatId) || Promise.resolve();
       const next = previous.catch(() => {}).then(work).finally(() => {
@@ -230,6 +243,10 @@ function createNewCustomersService(options = {}) {
     async function processIncomingMessage(message, recovered = false) {
       const chatId = message?.from || '';
       if (message?.fromMe || !isDirectChat(chatId)) return;
+      if (!recovered && !isLiveEvent(message)) {
+        console.log(`New Customers Info: mensaje histórico ignorado para ${maskedIdentity(chatId)}.`);
+        return;
+      }
       console.log(`New Customers Info: mensaje directo ${recovered ? 'recuperado' : 'recibido'} de ${maskedIdentity(chatId)}.`);
       const chat = await message.getChat().catch(() => null);
       if (chat?.isGroup) {
@@ -246,11 +263,9 @@ function createNewCustomersService(options = {}) {
 
       const existing = store.getContactByChat(chatId);
       const incomingCommand = normalize(message?.body);
-      if (incomingCommand === START_COMMAND) {
-        if (!isAdminIdentity(chatId, whatsappContact)) {
-          console.log(`New Customers Info: comando administrativo rechazado para ${maskedIdentity(chatId)}.`);
-          return;
-        }
+      const adminCommand = (isStartCommand(incomingCommand) || incomingCommand === STOP_COMMAND)
+        && isAdminIdentity(chatId, whatsappContact);
+      if (isStartCommand(incomingCommand) && adminCommand) {
         activateChat({
           chatId,
           phoneE164: e164FromContact(chatId, whatsappContact),
@@ -261,14 +276,15 @@ function createNewCustomersService(options = {}) {
         await flushOutbox(client);
         return;
       }
-      if (incomingCommand === STOP_COMMAND) {
-        if (!isAdminIdentity(chatId, whatsappContact)) {
-          console.log(`New Customers Info: comando administrativo rechazado para ${maskedIdentity(chatId)}.`);
-        } else if (existing) {
+      if (incomingCommand === STOP_COMMAND && adminCommand) {
+        if (existing) {
           stopChat({ chatId, phoneE164: e164FromContact(chatId, whatsappContact), messageId: messageIdOf(message) });
           console.log(`New Customers Info: bot detenido por comando recibido de ${maskedIdentity(chatId)}.`);
         }
         return;
+      }
+      if ((isStartCommand(incomingCommand) || incomingCommand === STOP_COMMAND) && !adminCommand) {
+        console.log(`New Customers Info: texto reservado recibido de cliente ${maskedIdentity(chatId)}; se procesa como mensaje normal.`);
       }
       if (!existing) {
         if (!shouldAutoActivate(chatId, whatsappContact)) return;
@@ -336,7 +352,11 @@ function createNewCustomersService(options = {}) {
       const rawChatId = message?.to || message?.id?.remote || message?.from || '';
       const chatId = typeof rawChatId === 'string' ? rawChatId : (rawChatId?._serialized || '');
       const command = normalize(message?.body);
-      if (!message?.fromMe || !isDirectChat(chatId) || ![START_COMMAND, STOP_COMMAND].includes(command)) return;
+      if (!message?.fromMe || !isDirectChat(chatId) || (!isStartCommand(command) && command !== STOP_COMMAND)) return;
+      if (!isLiveEvent(message)) {
+        console.log(`New Customers Info: comando histórico ignorado para ${maskedIdentity(chatId)}.`);
+        return;
+      }
       serialize(chatId, async () => {
         const chat = await message.getChat().catch(() => null);
         if (chat?.isGroup) return;
@@ -368,6 +388,7 @@ function createNewCustomersService(options = {}) {
     });
 
     client.on('ready', async () => {
+      readyAtUnix = Math.floor(Date.now() / 1000);
       try {
         await recoverAllowedMessages();
         await flushOutbox(client);

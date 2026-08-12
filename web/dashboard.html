@@ -78,7 +78,7 @@
 
       <div class="hint">
         <strong id="resultCount">Cargando expedientes...</strong>
-        Modo producción: el bot se activa automáticamente para números no guardados, únicamente en chats individuales. El admin puede enviar <code>Stop bot</code> para detener un chat y <code>start bot</code> para reiniciarlo.
+        Modo producción: el bot se activa automáticamente para números no guardados, únicamente en chats individuales. El admin puede enviar <code>Stop bot</code> para detener un chat y <code>start bot</code> o <code>iniciar bot</code> para iniciarlo.
       </div>
       <div id="contactsRuntimeNotice" class="property-runtime-notice hidden">
         El servicio web necesita reiniciarse para habilitar el borrado de contactos.
@@ -197,28 +197,15 @@
             Disponible hasta
             <input id="appointmentEndDate" type="date" required />
           </label>
-          <fieldset class="appointment-weekdays">
-            <legend>Días disponibles</legend>
-            <label><input type="checkbox" name="appointmentWeekday" value="1" /> Lunes</label>
-            <label><input type="checkbox" name="appointmentWeekday" value="2" /> Martes</label>
-            <label><input type="checkbox" name="appointmentWeekday" value="3" /> Miércoles</label>
-            <label><input type="checkbox" name="appointmentWeekday" value="4" /> Jueves</label>
-            <label><input type="checkbox" name="appointmentWeekday" value="5" /> Viernes</label>
-            <label><input type="checkbox" name="appointmentWeekday" value="6" /> Sábado</label>
-            <label><input type="checkbox" name="appointmentWeekday" value="0" /> Domingo</label>
-          </fieldset>
           <div class="appointment-windows-editor">
-            <strong>Horarios disponibles</strong>
-            <div class="appointment-window-row">
-              <span>Horario 1</span>
-              <label>Desde <input id="appointmentWindowOneStart" type="time" required /></label>
-              <label>Hasta <input id="appointmentWindowOneEnd" type="time" required /></label>
+            <div class="appointment-windows-header">
+              <div>
+                <strong>Horarios disponibles</strong>
+                <span>Cada horario puede aplicarse a días diferentes. Puedes eliminarlos todos para pausar temporalmente las visitas.</span>
+              </div>
+              <button id="addAppointmentWindowButton" class="secondary small" type="button">Agregar horario</button>
             </div>
-            <div class="appointment-window-row">
-              <span>Horario 2</span>
-              <label>Desde <input id="appointmentWindowTwoStart" type="time" required /></label>
-              <label>Hasta <input id="appointmentWindowTwoEnd" type="time" required /></label>
-            </div>
+            <div id="appointmentWindowsList"></div>
           </div>
         </div>
       </form>

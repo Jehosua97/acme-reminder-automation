@@ -318,9 +318,35 @@
   display: grid;
   gap: 9px;
 }
+.appointment-windows-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.appointment-windows-header > div {
+  display: grid;
+  gap: 3px;
+}
+.appointment-windows-header span,
+.appointment-windows-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+#appointmentWindowsList {
+  display: grid;
+  gap: 9px;
+}
+.appointment-windows-empty {
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: #f8fafc;
+  text-align: center;
+}
 .appointment-window-row {
   display: grid;
-  grid-template-columns: 90px repeat(2, minmax(180px, 1fr));
+  grid-template-columns: 90px repeat(2, minmax(180px, 1fr)) auto;
   align-items: end;
   gap: 12px;
   padding: 10px 12px;
@@ -332,6 +358,33 @@
   align-self: center;
   font-size: 12px;
   font-weight: 700;
+}
+.appointment-window-row > button {
+  margin-bottom: 1px;
+}
+.appointment-window-weekdays {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+.appointment-window-weekdays legend {
+  padding: 0 5px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.appointment-window-weekdays label {
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+}
+.appointment-window-weekdays input {
+  width: 16px;
+  height: 16px;
 }
 .appointment-list-toolbar {
   margin-top: 4px;
@@ -428,6 +481,7 @@ code {
   .appointment-settings-grid { grid-template-columns: 1fr; }
   .appointment-weekdays, .appointment-windows-editor { grid-column: auto; }
   .appointment-settings-header { align-items: stretch; flex-direction: column; }
+  .appointment-windows-header { align-items: stretch; flex-direction: column; }
   .appointment-window-row { grid-template-columns: 1fr; }
   .customer-event { grid-template-columns: 1fr; }
   .customer-event time { text-align: left; }

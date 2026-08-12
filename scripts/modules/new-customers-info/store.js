@@ -14,7 +14,7 @@ const {
 
 const LEAD_STATUSES = [
   'NUEVO', 'EN_CONVERSACION', 'OPCIONES_ENVIADAS', 'INTERESADO',
-  'CITA_AGENDADA', 'ATENCION_HUMANA', 'NO_INTERESADO', 'SEGUIMIENTO',
+  'CITA_AGENDADA', 'CITA_CANCELADA', 'ATENCION_HUMANA', 'NO_INTERESADO', 'SEGUIMIENTO',
   'CONVERTIDO', 'REQUIERE_ATENCION', 'BOT_DETENIDO',
 ];
 
@@ -372,11 +372,11 @@ class NewCustomersStore {
     const occupied = new Set(this.db.prepare(`SELECT visit_date, visit_time FROM appointments
       WHERE status='SCHEDULED' ${contactFilter}`).all(...values)
       .map((row) => `${row.visit_date}|${row.visit_time}`));
-    const times = availableTimes(settings);
     return {
       dates: availableDates(settings).map((date) => ({
         date,
-        times: times.filter((slot) => !occupied.has(`${date}|${slot.time}`)),
+        times: availableTimes(settings, new Date(`${date}T12:00:00Z`).getUTCDay())
+          .filter((slot) => !occupied.has(`${date}|${slot.time}`)),
       })).filter((entry) => entry.times.length > 0),
     };
   }
@@ -468,7 +468,11 @@ class NewCustomersStore {
         last_message=?, updated_at=?, last_message_at=? WHERE id=?`)
         .run(transition.leadStatus, transition.conversationStatus, transition.currentFieldId, transition.language || null,
           JSON.stringify(matchIds), incomingText, timestamp, timestamp, contact.id);
-      this.saveAnswers(contact.id, transition.answers, 'CHAT', timestamp);
+      if (transition.resetConversationData) {
+        this.db.prepare('DELETE FROM answers WHERE contact_id = ?').run(contact.id);
+      } else {
+        this.saveAnswers(contact.id, transition.answers, 'CHAT', timestamp);
+      }
       let appointmentData = null;
       if (transition.appointmentAction?.type === 'BOOK') {
         appointmentData = this.bookAppointment(contact.id, transition.appointmentAction, timestamp);

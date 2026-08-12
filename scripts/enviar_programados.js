@@ -21,7 +21,6 @@ const path = require('path');
 const qrcode = require('qrcode-terminal');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const { rowsForSender, applySendResults } = require('./data_store');
-const { createNewCustomersService } = require('./modules/new-customers-info/service');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const ARGUMENTOS = process.argv.slice(2);
@@ -761,17 +760,6 @@ client = new Client({
     ],
   },
 });
-
-// El bot de clientes comparte esta misma instancia y sesión de WhatsApp.
-// En pruebas solo acepta los números configurados; en producción acepta contactos no guardados.
-const newCustomersService = createNewCustomersService();
-newCustomersService.attach(client);
-const newCustomersPolicy = newCustomersService.policyInfo();
-console.log(
-  newCustomersPolicy.testMode
-    ? `New Customers Info: modo prueba limitado a ${newCustomersPolicy.allowedNumbers.join(', ')}; solo chats directos.`
-    : 'New Customers Info: modo produccion para contactos no guardados; solo chats directos.'
-);
 
 client.on('qr', (qr) => {
   if (temporizadorInicializacion) clearTimeout(temporizadorInicializacion);

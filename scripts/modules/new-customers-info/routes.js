@@ -10,6 +10,7 @@ function createNewCustomersInfoRouter(service) {
     module: 'new-customers-info',
     enabled: true,
     activationCommand: 'start bot',
+    activationCommands: ['start bot', 'iniciar bot'],
     stopCommand: 'stop bot',
     leadStatuses: LEAD_STATUSES,
     policy: service.policyInfo(),

@@ -6,7 +6,7 @@ $RutaRuntime = Join-Path $Proyecto 'runtime'
 $RutaLock = Join-Path $RutaRuntime 'servicio_programados.lock'
 $RutaSesion = Join-Path $Proyecto '.wwebjs_auth'
 $RutaPerfil = Join-Path $RutaSesion 'session-recordatorios-excel'
-$RutaSesionNormalizada = $RutaSesion -replace '\\', '/'
+$RutaPerfilNormalizada = $RutaPerfil -replace '\\', '/'
 
 function Remover-LocksPerfilWhatsApp {
     $locks = @('DevToolsActivePort', 'lockfile', 'SingletonLock', 'SingletonCookie', 'SingletonSocket')
@@ -16,30 +16,6 @@ function Remover-LocksPerfilWhatsApp {
             Remove-Item -LiteralPath $ruta -Force -ErrorAction SilentlyContinue
         }
     }
-}
-
-function Detener-ChromeHuerfano {
-    $procesos = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
-    $idsVivos = @{}
-    foreach ($p in $procesos) { $idsVivos[[int]$p.ProcessId] = $true }
-    $porId = @{}
-    foreach ($p in $procesos) { $porId[[int]$p.ProcessId] = $p }
-
-    $procesos |
-        Where-Object { $_.Name -eq 'chrome.exe' } |
-        ForEach-Object {
-            $padre = $porId[[int]$_.ParentProcessId]
-            if ($padre -and $padre.Name -match '^(node|powershell)\.exe$') {
-                taskkill.exe /PID $padre.ProcessId /T /F | Out-Null
-            }
-        }
-
-    $procesos |
-        Where-Object {
-            $_.Name -eq 'chrome.exe' -and
-            -not $idsVivos.ContainsKey([int]$_.ParentProcessId)
-        } |
-        ForEach-Object { taskkill.exe /PID $_.ProcessId /T /F | Out-Null }
 }
 
 if (Test-Path -LiteralPath $RutaLock) {
@@ -72,14 +48,13 @@ Get-CimInstance Win32_Process |
             $_.Name -match '^(chrome|msedge|chromium)\.exe$' -or
             $cmd -match 'chrome-win64\\chrome\.exe'
         ) -and (
-            $cmd -like "*$RutaSesion*" -or
-            $cmd -like "*$RutaSesionNormalizada*" -or
+            $cmd -like "*$RutaPerfil*" -or
+            $cmd -like "*$RutaPerfilNormalizada*" -or
             $cmd -like '*session-recordatorios-excel*'
         )
     } |
     ForEach-Object { taskkill.exe /PID $_.ProcessId /T /F | Out-Null }
 
-Detener-ChromeHuerfano
 Remover-LocksPerfilWhatsApp
 
 Write-Output 'Servicio de recordatorios detenido.'

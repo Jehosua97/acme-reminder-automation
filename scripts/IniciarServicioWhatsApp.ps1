@@ -9,7 +9,7 @@ $RutaLock = Join-Path $RutaRuntime 'servicio_programados.lock'
 $RutaSettings = Join-Path $Proyecto 'data\settings.json'
 $RutaSesion = Join-Path $Proyecto '.wwebjs_auth'
 $RutaPerfil = Join-Path $RutaSesion 'session-recordatorios-excel'
-$RutaSesionNormalizada = $RutaSesion -replace '\\', '/'
+$RutaPerfilNormalizada = $RutaPerfil -replace '\\', '/'
 
 if (-not (Test-Path -LiteralPath $RutaRuntime)) {
     New-Item -ItemType Directory -Force -Path $RutaRuntime | Out-Null
@@ -27,42 +27,13 @@ function Detener-ChromiumSesionWhatsApp {
                 $_.Name -match '^(chrome|msedge|chromium)\.exe$' -or
                 $cmd -match 'chrome-win64\\chrome\.exe'
             ) -and (
-                $cmd -like "*$RutaSesion*" -or
-                $cmd -like "*$RutaSesionNormalizada*" -or
+                $cmd -like "*$RutaPerfil*" -or
+                $cmd -like "*$RutaPerfilNormalizada*" -or
                 $cmd -like '*session-recordatorios-excel*'
             )
         } |
         ForEach-Object {
             Escribir-Log "Cerrando Chromium huerfano de WhatsApp Web PID $($_.ProcessId)."
-            taskkill.exe /PID $_.ProcessId /T /F | Out-Null
-        }
-
-    $procesos = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
-    $idsVivos = @{}
-    foreach ($p in $procesos) { $idsVivos[[int]$p.ProcessId] = $true }
-    $porId = @{}
-    foreach ($p in $procesos) { $porId[[int]$p.ProcessId] = $p }
-
-    $procesos |
-        Where-Object { $_.Name -eq 'chrome.exe' } |
-        ForEach-Object {
-            $padre = $porId[[int]$_.ParentProcessId]
-            if ($padre -and $padre.Name -match '^(node|powershell)\.exe$') {
-                Escribir-Log "Cerrando proceso padre de Chrome huerfano PID $($padre.ProcessId)."
-                taskkill.exe /PID $padre.ProcessId /T /F | Out-Null
-            }
-        }
-
-    $procesos = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
-    $idsVivos = @{}
-    foreach ($p in $procesos) { $idsVivos[[int]$p.ProcessId] = $true }
-    $procesos |
-        Where-Object {
-            $_.Name -eq 'chrome.exe' -and
-            -not $idsVivos.ContainsKey([int]$_.ParentProcessId)
-        } |
-        ForEach-Object {
-            Escribir-Log "Cerrando Chrome huerfano PID $($_.ProcessId)."
             taskkill.exe /PID $_.ProcessId /T /F | Out-Null
         }
 

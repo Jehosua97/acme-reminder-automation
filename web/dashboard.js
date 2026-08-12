@@ -5,6 +5,7 @@ const state = {
   properties: [],
   appointments: [],
   appointmentSettings: null,
+  appointmentDraftWindows: [],
   propertyMedia: [],
   inventoryWritable: false,
   appointmentsWritable: false,
@@ -16,6 +17,7 @@ const STATUS_LABELS = {
   OPCIONES_ENVIADAS: 'Opciones enviadas',
   INTERESADO: 'Interesado',
   CITA_AGENDADA: 'Cita agendada',
+  CITA_CANCELADA: 'Cita cancelada',
   ATENCION_HUMANA: 'Atención humana',
   NO_INTERESADO: 'No interesado',
   SEGUIMIENTO: 'Seguimiento',
@@ -28,6 +30,7 @@ const FIELD_LABELS = {
   occupants: 'Esperando personas',
   parking: 'Esperando parking',
   move_in_date: 'Esperando fecha',
+  property_interest: 'Eligiendo ubicación',
   next_action: 'Esperando decisión',
   appointment_property: 'Eligiendo habitación',
   appointment_date: 'Eligiendo fecha de visita',
@@ -40,6 +43,7 @@ const EVENT_LABELS = {
   ANSWER_SAVED: 'Respuesta guardada',
   INVALID_ANSWER: 'Respuesta no reconocida',
   OPTIONS_MATCHED: 'Opciones enviadas',
+  PROPERTY_INTEREST_SELECTED: 'Ubicación seleccionada',
   LEAD_INTERESTED: 'Marcado como interesado',
   LEAD_NOT_INTERESTED: 'Marcado como no interesado',
   STAFF_REVIEW_REQUESTED: 'Requiere atención',
@@ -58,6 +62,16 @@ const EVENT_LABELS = {
   HUMAN_HANDOFF_REQUESTED: 'Atención humana solicitada',
 };
 const $ = (id) => document.getElementById(id);
+const NEW_CUSTOMERS_API_ORIGIN = `${window.location.protocol}//${window.location.hostname}:3001`;
+const APPOINTMENT_WEEKDAYS = [
+  { value: 1, label: 'Lunes', short: 'Lun' },
+  { value: 2, label: 'Martes', short: 'Mar' },
+  { value: 3, label: 'Miércoles', short: 'Mié' },
+  { value: 4, label: 'Jueves', short: 'Jue' },
+  { value: 5, label: 'Viernes', short: 'Vie' },
+  { value: 6, label: 'Sábado', short: 'Sáb' },
+  { value: 0, label: 'Domingo', short: 'Dom' },
+];
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (character) => ({
@@ -66,7 +80,10 @@ function escapeHtml(value) {
 }
 
 async function request(url, options) {
-  const response = await fetch(url, options);
+  const target = String(url).startsWith('/api/new-customers-info')
+    ? `${NEW_CUSTOMERS_API_ORIGIN}${url}`
+    : url;
+  const response = await fetch(target, options);
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Error HTTP ${response.status}`);
   return data;
@@ -113,6 +130,7 @@ function conversationStage(contact) {
   if (contact.conversationStatus === 'STOPPED_BY_ADMIN') return 'Bot detenido';
   if (contact.conversationStatus === 'HANDOFF_REQUESTED') return 'Atención humana';
   if (contact.appointment) return 'Cita agendada';
+  if (contact.leadStatus === 'CITA_CANCELADA') return 'Listo para iniciar de nuevo';
   if (contact.conversationStatus === 'COMPLETE') return 'Cuestionario completo';
   return FIELD_LABELS[contact.currentFieldId] || 'Revisión manual';
 }
@@ -225,23 +243,73 @@ function setAppointmentFormDisabled(disabled) {
   $('appointmentSettingsForm').querySelectorAll('input, button').forEach((element) => { element.disabled = disabled; });
 }
 
+function syncAppointmentWindowDraft() {
+  state.appointmentDraftWindows = Array.from(document.querySelectorAll('.appointment-window-row')).map((row) => ({
+    id: row.dataset.windowId,
+    start: row.querySelector('.appointment-window-start').value,
+    end: row.querySelector('.appointment-window-end').value,
+    weekdays: Array.from(row.querySelectorAll('.appointment-window-weekday:checked')).map((input) => Number(input.value)),
+  }));
+}
+
+function renderAppointmentWindows() {
+  const list = $('appointmentWindowsList');
+  if (!state.appointmentDraftWindows.length) {
+    list.innerHTML = '<div class="appointment-windows-empty">No hay horarios disponibles. El bot no ofrecerá citas hasta que agregues y guardes uno.</div>';
+  } else {
+    list.innerHTML = state.appointmentDraftWindows.map((window, index) => `
+      <div class="appointment-window-row" data-window-id="${escapeHtml(window.id)}">
+        <span>Horario ${index + 1}</span>
+        <label>Desde <input class="appointment-window-start" type="time" value="${escapeHtml(window.start)}" required /></label>
+        <label>Hasta <input class="appointment-window-end" type="time" value="${escapeHtml(window.end)}" required /></label>
+        <button class="danger small delete-appointment-window" type="button" data-index="${index}">Eliminar</button>
+        <fieldset class="appointment-window-weekdays">
+          <legend>Días para este horario</legend>
+          ${APPOINTMENT_WEEKDAYS.map((day) => `<label><input class="appointment-window-weekday" type="checkbox" value="${day.value}" ${(window.weekdays || []).includes(day.value) ? 'checked' : ''} /> ${day.label}</label>`).join('')}
+        </fieldset>
+      </div>`).join('');
+  }
+  $('addAppointmentWindowButton').disabled = !state.appointmentsWritable || state.appointmentDraftWindows.length >= 4;
+  list.querySelectorAll('.delete-appointment-window').forEach((button) => {
+    button.addEventListener('click', () => {
+      syncAppointmentWindowDraft();
+      state.appointmentDraftWindows.splice(Number(button.dataset.index), 1);
+      renderAppointmentWindows();
+    });
+  });
+}
+
+function addAppointmentWindow() {
+  syncAppointmentWindowDraft();
+  if (state.appointmentDraftWindows.length >= 4) {
+    showToast('Puedes configurar hasta cuatro horarios.');
+    return;
+  }
+  const usedIds = new Set(state.appointmentDraftWindows.map((window) => window.id));
+  let number = 1;
+  while (usedIds.has(`window-${number}`)) number += 1;
+  state.appointmentDraftWindows.push({
+    id: `window-${number}`,
+    start: '',
+    end: '',
+    weekdays: [...(state.appointmentSettings?.weekdays || [1, 2, 3, 4, 5])],
+  });
+  renderAppointmentWindows();
+}
+
 function renderAppointmentSettings() {
   const settings = state.appointmentSettings;
   if (!settings) return;
   $('appointmentStartDate').value = settings.startDate;
   $('appointmentEndDate').value = settings.endDate;
-  document.querySelectorAll('input[name="appointmentWeekday"]').forEach((input) => {
-    input.checked = settings.weekdays.includes(Number(input.value));
-  });
-  const first = settings.timeWindows[0] || { start: '', end: '' };
-  const second = settings.timeWindows[1] || { start: '', end: '' };
-  $('appointmentWindowOneStart').value = first.start;
-  $('appointmentWindowOneEnd').value = first.end;
-  $('appointmentWindowTwoStart').value = second.start;
-  $('appointmentWindowTwoEnd').value = second.end;
+  state.appointmentDraftWindows = settings.timeWindows.map((window) => ({
+    ...window,
+    weekdays: Array.isArray(window.weekdays) ? [...window.weekdays] : [...settings.weekdays],
+  }));
+  renderAppointmentWindows();
   $('metricAppointmentRange').textContent = `${settings.startDate.slice(5)} — ${settings.endDate.slice(5)}`;
-  const dayLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-  $('metricAppointmentDays').textContent = settings.weekdays.map((day) => dayLabels[day]).join(', ');
+  const labelsByDay = new Map(APPOINTMENT_WEEKDAYS.map((day) => [day.value, day.short]));
+  $('metricAppointmentDays').textContent = settings.weekdays.map((day) => labelsByDay.get(day)).join(', ') || 'Sin días';
   $('metricAppointmentWindows').textContent = settings.timeWindows.length;
 }
 
@@ -292,7 +360,8 @@ async function loadAppointmentDashboard() {
 async function saveAppointmentSettings(event) {
   event.preventDefault();
   if (!state.appointmentsWritable) return;
-  const weekdays = Array.from(document.querySelectorAll('input[name="appointmentWeekday"]:checked')).map((input) => Number(input.value));
+  syncAppointmentWindowDraft();
+  const weekdays = [...new Set(state.appointmentDraftWindows.flatMap((window) => window.weekdays))].sort();
   const button = $('saveAppointmentSettingsButton');
   button.disabled = true;
   button.textContent = 'Guardando...';
@@ -304,10 +373,7 @@ async function saveAppointmentSettings(event) {
         startDate: $('appointmentStartDate').value,
         endDate: $('appointmentEndDate').value,
         weekdays,
-        timeWindows: [
-          { id: 'morning', start: $('appointmentWindowOneStart').value, end: $('appointmentWindowOneEnd').value },
-          { id: 'evening', start: $('appointmentWindowTwoStart').value, end: $('appointmentWindowTwoEnd').value },
-        ],
+        timeWindows: state.appointmentDraftWindows,
         timezone: state.appointmentSettings?.timezone || 'America/Toronto',
       }),
     });
@@ -559,16 +625,16 @@ async function loadDashboard() {
 async function loadSystemStatus() {
   const pill = $('workerStatus');
   try {
-    const status = await request('/api/status');
+    const status = await request('/api/new-customers-info/whatsapp/status');
     pill.className = 'status-pill';
-    if (status.paused) {
-      pill.textContent = 'Sistema pausado';
-      pill.classList.add('paused');
-    } else if (status.running) {
-      pill.textContent = `Servicio: corriendo (PID ${status.pid || '--'})`;
+    if (status.status === 'READY') {
+      pill.textContent = `WhatsApp clientes: conectado ${status.linkedNumberMasked || ''}`.trim();
       pill.classList.add('ok');
+    } else if (status.status === 'WAITING_FOR_QR') {
+      pill.textContent = 'WhatsApp clientes: esperando QR';
+      pill.classList.add('paused');
     } else {
-      pill.textContent = 'Servicio: detenido';
+      pill.textContent = `WhatsApp clientes: ${status.status || 'detenido'}`;
       pill.classList.add('bad');
     }
   } catch {
@@ -595,6 +661,7 @@ $('showPropertiesButton').addEventListener('click', () => selectAdminView('prope
 $('showAppointmentsButton').addEventListener('click', () => selectAdminView('appointments'));
 $('refreshPropertiesButton').addEventListener('click', loadProperties);
 $('refreshAppointmentsButton').addEventListener('click', loadAppointmentDashboard);
+$('addAppointmentWindowButton').addEventListener('click', addAppointmentWindow);
 $('appointmentSettingsForm').addEventListener('submit', saveAppointmentSettings);
 $('propertyMaxOccupants').addEventListener('change', syncPriceTwoField);
 $('propertyForm').addEventListener('submit', saveProperty);

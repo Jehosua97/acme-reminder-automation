@@ -8,6 +8,7 @@
     "send": "node scripts/enviar_programados.js",
     "send:auto": "node scripts/enviar_programados.js --auto --headless",
     "service": "node scripts/enviar_programados.js --service --headless",
+    "customers:service": "node scripts/new_customers_whatsapp.js",
     "web": "node scripts/web_server.js",
     "test": "node scripts/test_web_routes.js"
   },

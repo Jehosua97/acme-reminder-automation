@@ -23,7 +23,11 @@ const DEFAULT_PROPERTIES = [
     maxOccupants: 2,
     parkingSpaces: 2,
     prices: { 1: 1000, 2: 1200 },
-    mediaItems: [],
+    mediaItems: [{
+      mediaPath: 'web/assets/new-customers/11-huntingwood.jpg',
+      mediaUrl: '/assets/new-customers/11-huntingwood.jpg',
+      mediaName: '11 Huntingwood Cres.jpg',
+    }],
   },
   {
     id: '152-royal-palm-1',

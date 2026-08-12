@@ -3,10 +3,10 @@
 const DEFAULT_APPOINTMENT_SETTINGS = {
   startDate: '2026-08-18',
   endDate: '2026-08-31',
-  weekdays: [2, 3, 4, 5],
+  weekdays: [0, 1, 2, 3, 4, 5, 6],
   timeWindows: [
-    { id: 'morning', start: '10:00', end: '13:00' },
-    { id: 'evening', start: '18:00', end: '20:00' },
+    { id: 'weekday-evening', start: '18:00', end: '21:00', weekdays: [1, 2, 3, 4, 5] },
+    { id: 'weekend-afternoon', start: '13:00', end: '18:00', weekdays: [0, 6] },
   ],
   timezone: 'America/Toronto',
 };
@@ -31,26 +31,32 @@ function validateAppointmentSettings(input = {}, current = DEFAULT_APPOINTMENT_S
   const span = (new Date(`${endDate}T12:00:00Z`) - new Date(`${startDate}T12:00:00Z`)) / 86400000;
   if (span > 366) throw new Error('El periodo de visitas no puede exceder 366 días.');
 
-  if (!Array.isArray(weekdaysInput)) throw new Error('Selecciona al menos un día de la semana.');
-  const weekdays = [...new Set(weekdaysInput.map(Number))].filter((day) => Number.isInteger(day) && day >= 0 && day <= 6).sort();
-  if (!weekdays.length) throw new Error('Selecciona al menos un día de la semana.');
+  if (!Array.isArray(weekdaysInput)) throw new Error('Los días disponibles no son válidos.');
+  const fallbackWeekdays = [...new Set(weekdaysInput.map(Number))]
+    .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6).sort();
 
-  if (!Array.isArray(windowsInput) || !windowsInput.length || windowsInput.length > 4) {
-    throw new Error('Configura entre uno y cuatro horarios de visita.');
+  if (!Array.isArray(windowsInput) || windowsInput.length > 4) {
+    throw new Error('Configura hasta cuatro horarios de visita.');
   }
   const timeWindows = windowsInput.map((window, index) => {
     const start = String(window?.start || '').trim();
     const end = String(window?.end || '').trim();
     const id = String(window?.id || `window-${index + 1}`).trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
+    const windowWeekdaysInput = window?.weekdays ?? fallbackWeekdays;
+    if (!Array.isArray(windowWeekdaysInput)) throw new Error(`Los días del horario ${index + 1} no son válidos.`);
+    const windowWeekdays = [...new Set(windowWeekdaysInput.map(Number))]
+      .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6).sort();
     if (!id || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)
         || start < '00:00' || end > '23:59' || start >= end) {
       throw new Error(`El horario ${index + 1} no es válido.`);
     }
-    return { id, start, end };
+    if (!windowWeekdays.length) throw new Error(`Selecciona al menos un día para el horario ${index + 1}.`);
+    return { id, start, end, weekdays: windowWeekdays };
   });
   if (new Set(timeWindows.map((window) => window.id)).size !== timeWindows.length) {
     throw new Error('Los horarios deben tener identificadores diferentes.');
   }
+  const weekdays = [...new Set(timeWindows.flatMap((window) => window.weekdays))].sort();
   if (!timezone || timezone.length > 100) throw new Error('La zona horaria no es válida.');
   return { startDate, endDate, weekdays, timeWindows, timezone };
 }
@@ -82,10 +88,10 @@ function timeFromMinutes(value) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
-function availableTimes(settings) {
+function availableTimes(settings, weekday = null) {
   const safe = validateAppointmentSettings(settings);
   const slots = new Map();
-  for (const window of safe.timeWindows) {
+  for (const window of safe.timeWindows.filter((item) => weekday === null || item.weekdays.includes(Number(weekday)))) {
     const start = minutesFromTime(window.start);
     const end = minutesFromTime(window.end);
     for (let minute = start; minute < end; minute += APPOINTMENT_SLOT_MINUTES) {

@@ -4,6 +4,7 @@ node_modules/
 runtime/
 data/reminders.json
 data/new-customers-info.sqlite*
+data/new-customers-whatsapp.sqlite*
 data/uploads/
 data/backups/
 tools/

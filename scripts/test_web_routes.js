@@ -15,7 +15,9 @@ async function testConversation(service) {
 
   service.activateChat({ chatId, displayName: 'Cliente de prueba', messageId: 'admin-1' });
   await service.flushOutbox(client);
+  assert.match(sent.at(-1)[1], /^Welcome to Confort Place\./);
   assert.match(sent.at(-1)[1], /English or Spanish/i);
+  assert.doesNotMatch(sent.at(-1)[1], /Good morning|Buenos días/i);
 
   service.handleIncoming({ chatId, text: 'Español', messageId: 'client-1' });
   service.handleIncoming({ chatId, text: '1 persona', messageId: 'client-2' });
@@ -25,62 +27,75 @@ async function testConversation(service) {
 
   const contact = service.store.getContactByChat(chatId);
   assert.equal(contact.conversationStatus, 'ACTIVE');
-  assert.equal(contact.currentFieldId, 'next_action');
+  assert.equal(contact.currentFieldId, 'property_interest');
   assert.equal(contact.leadStatus, 'OPCIONES_ENVIADAS');
   assert.equal(contact.answers.parking, false);
   assert.equal(contact.matchIds[0], '11-huntingwood', 'Las opciones con más parking deben aparecer primero');
   assert.ok(contact.matchIds.indexOf('17-hilldowntree-1') > contact.matchIds.indexOf('152-royal-palm-1'));
-  const roomPhotos = sent.filter((entry) => typeof entry[1] === 'object')
-    .map((entry) => ({ filename: entry[1].filename, caption: entry[2].caption }));
-  assert.equal(roomPhotos.length, 3);
-  const expectedPhotos = [
-    { suffix: '14-hayden.jpg', caption: /14 Hayden.+850/s, sha256: 'DD01F3328162CAE03BBF37E8FCE7B48AA4F6092C997746E55C6689D70C2153A6' },
-    { suffix: '152-royal-palm-room-1.jpg', caption: /152 Royal Palm.+#1.+1,000/s, sha256: '8F0BD87CF7602D763E0B25FBCA5173DFD329AE34D7348F4313F1AACD72A4C53B' },
-    { suffix: '152-royal-palm-room-2.jpg', caption: /152 Royal Palm.+#2.+900/s, sha256: '4B5AB51EE22074215182386873113344822D9AE1184BA6A1A5022ECF3BD45AEB' },
-  ];
-  expectedPhotos.forEach((expected) => {
-    const photo = roomPhotos.find(({ filename }) => filename.endsWith(expected.suffix));
-    assert.ok(photo, `Debe enviarse ${expected.suffix}`);
-    assert.match(photo.caption, expected.caption, `La leyenda de ${expected.suffix} debe corresponder a su habitacion`);
-    const digest = crypto.createHash('sha256').update(fs.readFileSync(photo.filename)).digest('hex').toUpperCase();
-    assert.equal(digest, expected.sha256, `El contenido visual de ${expected.suffix} no debe intercambiarse`);
-  });
+  assert.equal(sent.filter((entry) => typeof entry[1] === 'object').length, 0, 'No deben enviarse fotos antes de elegir ubicación');
+  const locationMessage = sent.at(-1)[1];
+  assert.match(locationMessage, /Cuál ubicación le interesa más/i);
+  assert.match(locationMessage, /11 Huntingwood.+Para una persona o pareja/);
+  assert.match(locationMessage, /14 Hayden.+Para una persona/);
+  assert.match(locationMessage, /152 Royal Palm.+Para una persona.+#2/);
+  assert.doesNotMatch(locationMessage, /\$|precio|CAD/i, 'La lista inicial debe contener ubicaciones sin precios');
 
   const beforeDuplicate = service.store.history(contact.id).length;
   const duplicate = service.handleIncoming({ chatId, text: 'mensaje duplicado', messageId: 'client-4' });
   assert.equal(duplicate.duplicate, true);
   assert.equal(service.store.history(contact.id).length, beforeDuplicate);
 
-  service.handleIncoming({ chatId, text: 'Me interesa la opción 1', messageId: 'client-5' });
+  const sentCountBeforeSelection = sent.length;
+  service.handleIncoming({ chatId, text: 'Me interesa la opción 2', messageId: 'client-5' });
+  assert.equal(service.store.getContactByChat(chatId).currentFieldId, 'next_action');
+  assert.equal(service.store.getContactByChat(chatId).answers.selected_property_id, '14-hayden');
+  await service.flushOutbox(client);
+  const roomPhotos = sent.filter((entry) => typeof entry[1] === 'object')
+    .map((entry) => ({ filename: entry[1].filename, caption: entry[2].caption }));
+  assert.equal(roomPhotos.length, 1, 'Solo debe enviarse la foto de la habitación seleccionada');
+  assert.ok(roomPhotos[0].filename.endsWith('14-hayden.jpg'));
+  assert.match(roomPhotos[0].caption, /14 Hayden.+850/s);
+  assert.doesNotMatch(roomPhotos[0].caption, /152 Royal Palm|17 Hilldowntree|11 Huntingwood/);
+  const selectedMessages = sent.slice(sentCountBeforeSelection)
+    .filter((entry) => typeof entry[1] === 'string')
+    .map((entry) => entry[1]);
+  assert.equal(selectedMessages.length, 1, 'Con foto solo debe enviarse adicionalmente la pregunta para agendar');
+  assert.match(selectedMessages[0], /agendar una visita/i);
+  assert.doesNotMatch(selectedMessages[0], /14 Hayden|\$850|Precio:/,
+    'La información de la propiedad no debe repetirse fuera de la foto');
+  const digest = crypto.createHash('sha256').update(fs.readFileSync(roomPhotos[0].filename)).digest('hex').toUpperCase();
+  assert.equal(digest, 'DD01F3328162CAE03BBF37E8FCE7B48AA4F6092C997746E55C6689D70C2153A6');
+
+  service.handleIncoming({ chatId, text: 'Sí', messageId: 'client-6' });
   assert.equal(service.store.getContactByChat(chatId).currentFieldId, 'appointment_date');
-  service.handleIncoming({ chatId, text: '1', messageId: 'client-6' });
+  service.handleIncoming({ chatId, text: '1', messageId: 'client-7' });
   assert.equal(service.store.getContactByChat(chatId).currentFieldId, 'appointment_time');
-  service.handleIncoming({ chatId, text: '6 pm', messageId: 'client-7' });
+  service.handleIncoming({ chatId, text: '6 pm', messageId: 'client-8' });
   let scheduledContact = service.store.getContactByChat(chatId);
   assert.equal(scheduledContact.leadStatus, 'CITA_AGENDADA');
   assert.equal(scheduledContact.conversationStatus, 'COMPLETE');
-  assert.equal(scheduledContact.appointment.propertyId, '11-huntingwood');
+  assert.equal(scheduledContact.appointment.propertyId, '14-hayden');
   assert.equal(scheduledContact.appointment.visitDate, '2026-08-18');
   assert.equal(scheduledContact.appointment.visitTime, '18:00');
-  assert.equal(scheduledContact.appointment.timeWindowId, 'evening');
+  assert.equal(scheduledContact.appointment.timeWindowId, 'weekday-evening');
 
-  service.handleIncoming({ chatId, text: 'Hola otra vez', messageId: 'client-8' });
+  service.handleIncoming({ chatId, text: 'Hola otra vez', messageId: 'client-9' });
   assert.equal(service.store.getContactByChat(chatId).appointment.id, scheduledContact.appointment.id);
-  service.handleIncoming({ chatId, text: 'Modificar', messageId: 'client-9' });
+  service.handleIncoming({ chatId, text: 'Modificar', messageId: 'client-10' });
   assert.equal(service.store.getContactByChat(chatId).currentFieldId, 'appointment_property');
-  service.handleIncoming({ chatId, text: '2', messageId: 'client-10' });
-  service.handleIncoming({ chatId, text: '2', messageId: 'client-11' });
-  service.handleIncoming({ chatId, text: '1', messageId: 'client-12' });
+  service.handleIncoming({ chatId, text: '1', messageId: 'client-11' });
+  service.handleIncoming({ chatId, text: '2', messageId: 'client-12' });
+  service.handleIncoming({ chatId, text: '1', messageId: 'client-13' });
   scheduledContact = service.store.getContactByChat(chatId);
-  assert.equal(scheduledContact.appointment.propertyId, '14-hayden');
+  assert.equal(scheduledContact.appointment.propertyId, '11-huntingwood');
   assert.equal(scheduledContact.appointment.visitDate, '2026-08-19');
-  assert.equal(scheduledContact.appointment.visitTime, '10:00');
-  assert.equal(scheduledContact.appointment.timeWindowId, 'morning');
+  assert.equal(scheduledContact.appointment.visitTime, '18:00');
+  assert.equal(scheduledContact.appointment.timeWindowId, 'weekday-evening');
   assert.equal(service.store.listAppointments({ status: 'SUPERSEDED' }).length, 1);
 
-  service.handleIncoming({ chatId, text: 'Cancelar', messageId: 'client-13' });
+  service.handleIncoming({ chatId, text: 'Cancelar', messageId: 'client-14' });
   assert.equal(service.store.getContactByChat(chatId).currentFieldId, 'appointment_cancel_confirmation');
-  service.handleIncoming({ chatId, text: 'No', messageId: 'client-14' });
+  service.handleIncoming({ chatId, text: 'No', messageId: 'client-15' });
   assert.ok(service.store.getContactByChat(chatId).appointment, 'Responder No debe conservar la cita');
 
   service.store.enqueue(contact.id, chatId, [{
@@ -95,7 +110,7 @@ async function testConversation(service) {
   assert.equal(service.store.getContactByChat(chatId).conversationStatus, 'STOPPED_BY_ADMIN');
   assert.equal(service.store.getContactByChat(chatId).leadStatus, 'BOT_DETENIDO');
   assert.equal(service.handleIncoming({ chatId, text: 'Sí', messageId: 'client-stopped' }).reason, 'STOPPED_BY_ADMIN');
-  service.handleIncoming({ chatId, text: 'start bot', messageId: 'admin-restart-1' });
+  service.handleIncoming({ chatId, text: 'inciair bot', messageId: 'admin-restart-1' });
   assert.equal(service.store.getContactByChat(chatId).currentFieldId, 'language');
   return contact.id;
 }
@@ -106,9 +121,10 @@ function qualifyAndBook(service, chatId, prefix) {
   service.handleIncoming({ chatId, text: '1 persona', messageId: `${prefix}-2` });
   service.handleIncoming({ chatId, text: 'sí', messageId: `${prefix}-3` });
   service.handleIncoming({ chatId, text: '1 de septiembre', messageId: `${prefix}-4` });
-  service.handleIncoming({ chatId, text: 'opción 1', messageId: `${prefix}-5` });
-  service.handleIncoming({ chatId, text: '1', messageId: `${prefix}-6` });
-  service.handleIncoming({ chatId, text: '1', messageId: `${prefix}-7` });
+  service.handleIncoming({ chatId, text: 'opción 1', messageId: `${prefix}-location` });
+  service.handleIncoming({ chatId, text: 'sí', messageId: `${prefix}-schedule` });
+  service.handleIncoming({ chatId, text: '1', messageId: `${prefix}-date` });
+  service.handleIncoming({ chatId, text: '1', messageId: `${prefix}-time` });
   return service.store.getContactByChat(chatId);
 }
 
@@ -117,8 +133,10 @@ function testHumanHandoffAndCancellation() {
   const service = createNewCustomersService({ store });
   const nonAdminChat = '14165557770@c.us';
   service.activateChat({ chatId: nonAdminChat, messageId: 'non-admin-start' });
-  assert.equal(service.handleIncoming({ chatId: nonAdminChat, text: 'Stop bot', messageId: 'non-admin-stop' }).reason, 'ADMIN_REQUIRED');
+  const nonAdminCommand = service.handleIncoming({ chatId: nonAdminChat, text: 'Stop bot', messageId: 'non-admin-stop' });
+  assert.equal(nonAdminCommand.reason, undefined, 'Un texto reservado de un cliente debe procesarse como respuesta normal');
   assert.equal(store.getContactByChat(nonAdminChat).conversationStatus, 'ACTIVE');
+  assert.equal(store.getContactByChat(nonAdminChat).currentFieldId, 'language');
   const handoffChat = '14165557771@c.us';
   service.activateChat({ chatId: handoffChat, messageId: 'handoff-start' });
   service.handleIncoming({ chatId: handoffChat, text: 'Quiero hablar con una persona', messageId: 'handoff-1' });
@@ -135,7 +153,24 @@ function testHumanHandoffAndCancellation() {
   service.handleIncoming({ chatId: cancelChat, text: 'Sí', messageId: 'cancel-9' });
   const cancelled = store.getContactByChat(cancelChat);
   assert.equal(cancelled.appointment, null);
+  assert.equal(cancelled.leadStatus, 'CITA_CANCELADA');
+  assert.equal(cancelled.conversationStatus, 'COMPLETE');
+  assert.equal(cancelled.language, null);
+  assert.deepEqual(cancelled.answers, {}, 'Cancelar debe borrar todas las respuestas del flujo anterior');
+  assert.deepEqual(cancelled.matchIds, [], 'Cancelar debe borrar las opciones del flujo anterior');
   assert.equal(store.listAppointments({ status: 'CANCELLED' }).length, 1);
+  const cancellationMessage = store.pendingOutbox(100).filter((message) => message.contactId === cancelled.id).at(-1);
+  assert.match(cancellationMessage.body, /visita fue cancelada/i);
+  service.handleIncoming({ chatId: cancelChat, text: 'Hola de nuevo', messageId: 'cancel-10' });
+  const restartedAfterCancellation = store.getContactByChat(cancelChat);
+  assert.equal(restartedAfterCancellation.currentFieldId, 'language');
+  assert.equal(restartedAfterCancellation.leadStatus, 'NUEVO');
+  assert.equal(restartedAfterCancellation.appointment, null);
+  assert.deepEqual(restartedAfterCancellation.answers, {});
+  assert.deepEqual(restartedAfterCancellation.matchIds, []);
+  const restartedMessage = store.pendingOutbox(100).filter((message) => message.contactId === cancelled.id).at(-1);
+  assert.match(restartedMessage.body, /English or Spanish/i,
+    'El primer mensaje después de cancelar debe mostrar el menú inicial');
 
   const reopenChat = '14165557773@c.us';
   service.activateChat({ chatId: reopenChat, messageId: 'reopen-start' });
@@ -143,19 +178,20 @@ function testHumanHandoffAndCancellation() {
   service.handleIncoming({ chatId: reopenChat, text: '1 person', messageId: 'reopen-2' });
   service.handleIncoming({ chatId: reopenChat, text: 'no', messageId: 'reopen-3' });
   service.handleIncoming({ chatId: reopenChat, text: 'September 1', messageId: 'reopen-4' });
-  service.handleIncoming({ chatId: reopenChat, text: 'no', messageId: 'reopen-5' });
+  service.handleIncoming({ chatId: reopenChat, text: '1', messageId: 'reopen-5' });
+  service.handleIncoming({ chatId: reopenChat, text: 'no', messageId: 'reopen-6' });
   const closedContact = store.getContactByChat(reopenChat);
   assert.equal(closedContact.conversationStatus, 'COMPLETE');
   assert.equal(closedContact.leadStatus, 'NO_INTERESADO');
   const farewell = store.pendingOutbox(100).filter((message) => message.contactId === closedContact.id).at(-1);
   assert.match(farewell.body, /Thank you for contacting Confort Place/i);
-  service.handleIncoming({ chatId: reopenChat, text: 'hi', messageId: 'reopen-6' });
+  service.handleIncoming({ chatId: reopenChat, text: 'hi', messageId: 'reopen-7' });
   const restarted = store.getContactByChat(reopenChat);
   assert.equal(restarted.currentFieldId, 'language');
   assert.equal(restarted.leadStatus, 'NUEVO');
   assert.deepEqual(restarted.answers, {}, 'El nuevo contacto debe reiniciarse sin respuestas anteriores');
   assert.deepEqual(restarted.matchIds, [], 'El nuevo contacto debe reiniciarse sin opciones anteriores');
-  service.handleIncoming({ chatId: reopenChat, text: 'English', messageId: 'reopen-7' });
+  service.handleIncoming({ chatId: reopenChat, text: 'English', messageId: 'reopen-8' });
   assert.equal(store.getContactByChat(reopenChat).currentFieldId, 'occupants');
 
   const englishChat = '14165557774@c.us';
@@ -165,24 +201,39 @@ function testHumanHandoffAndCancellation() {
   service.handleIncoming({ chatId: englishChat, text: 'no', messageId: 'english-3' });
   service.handleIncoming({ chatId: englishChat, text: 'September 1', messageId: 'english-4' });
   const englishContact = store.getContactByChat(englishChat);
-  let englishMessages = store.pendingOutbox(100).filter((message) => message.contactId === englishContact.id).map((message) => message.body).join('\n');
-  assert.match(englishMessages, /Room for one person or a couple/);
-  assert.match(englishMessages, /Available room/);
-  assert.match(englishMessages, /Room #1/);
-  assert.doesNotMatch(englishMessages, /Habitaci[oó]n/i, 'Los resultados en inglés no deben mezclar descripciones en español');
-  service.handleIncoming({ chatId: englishChat, text: 'yes', messageId: 'english-5' });
-  englishMessages = store.pendingOutbox(100).filter((message) => message.contactId === englishContact.id).at(-1).body;
-  assert.match(englishMessages, /Which room would you like to visit/);
-  assert.doesNotMatch(englishMessages, /Habitaci[oó]n/i, 'La selección de habitación debe estar completamente en inglés');
-  service.handleIncoming({ chatId: englishChat, text: '1', messageId: 'english-6' });
+  const beforeSelection = store.pendingOutbox(100).filter((message) => message.contactId === englishContact.id);
+  let englishMessages = beforeSelection.map((message) => message.body).join('\n');
+  assert.match(englishMessages, /11 Huntingwood.+For one person or a couple/);
+  assert.match(englishMessages, /14 Hayden.+For one person/);
+  assert.match(englishMessages, /152 Royal Palm.+For one person.+Room #1/);
+  assert.match(englishMessages, /Which location interests you most/);
+  assert.doesNotMatch(englishMessages, /\$|Price:/i, 'Las ubicaciones deben mostrarse antes de revelar precios');
+  assert.doesNotMatch(englishMessages, /Habitaci[oó]n|Para una persona/i, 'Los resultados en inglés no deben mezclar descripciones en español');
+  const beforeSelectionIds = new Set(beforeSelection.map((message) => message.id));
+  service.handleIncoming({ chatId: englishChat, text: '1', messageId: 'english-5' });
+  englishMessages = store.pendingOutbox(100)
+    .filter((message) => message.contactId === englishContact.id && !beforeSelectionIds.has(message.id))
+    .map((message) => message.body).join('\n');
+  const englishPropertyInfoMessages = store.pendingOutbox(100)
+    .filter((message) => message.contactId === englishContact.id && !beforeSelectionIds.has(message.id))
+    .filter((message) => /Price for one person/.test(message.body));
+  assert.equal(englishPropertyInfoMessages.length, 1,
+    'En inglés la información completa debe aparecer una sola vez, como descripción de la foto');
+  assert.match(englishMessages, /11 Huntingwood Cres/);
+  assert.match(englishMessages, /Price for one person: \*\$1,000 CAD\*/);
+  assert.match(englishMessages, /Price for a couple: \*\$1,200 CAD\*/);
+  assert.doesNotMatch(englishMessages, /14 Hayden|152 Royal Palm|17 Hilldowntree/,
+    'Después de elegir solo debe compartirse la habitación seleccionada');
+  assert.doesNotMatch(englishMessages, /Habitaci[oó]n|Precio para/i, 'La información de la habitación debe estar completamente en inglés');
+  service.handleIncoming({ chatId: englishChat, text: 'yes', messageId: 'english-6' });
   service.handleIncoming({ chatId: englishChat, text: '1', messageId: 'english-7' });
   service.handleIncoming({ chatId: englishChat, text: '1', messageId: 'english-8' });
   englishMessages = store.pendingOutbox(100).filter((message) => message.contactId === englishContact.id).at(-1).body;
   assert.match(englishMessages, /Your visit is confirmed/);
   assert.doesNotMatch(englishMessages, /Habitaci[oó]n/i, 'La confirmación de cita debe estar completamente en inglés');
-  assert.equal(store.getContactByChat(englishChat).appointment.visitTime, '10:00');
+  assert.equal(store.getContactByChat(englishChat).appointment.visitTime, '18:00');
   const remainingTimes = store.getAppointmentAvailability().dates.find((entry) => entry.date === '2026-08-18').times.map((slot) => slot.time);
-  assert.equal(remainingTimes.includes('10:00'), false, 'Una hora ya agendada no debe ofrecerse a otro cliente');
+  assert.equal(remainingTimes.includes('18:00'), false, 'Una hora ya agendada no debe ofrecerse a otro cliente');
   store.close();
 }
 
@@ -193,7 +244,7 @@ async function settleEvents() {
 
 async function testWhatsAppEvents() {
   const store = new NewCustomersStore(':memory:');
-  const service = createNewCustomersService({ store, testMode: true, allowedNumbers: ['4378781645'] });
+  const service = createNewCustomersService({ store, testMode: true, allowedNumbers: ['4378781645'], allowMissingMessageTimestamp: true });
   const client = new EventEmitter();
   const sent = [];
   client.sendMessage = async (...args) => { sent.push(args); };
@@ -246,7 +297,7 @@ async function testWhatsAppEvents() {
   assert.equal(store.getContactByChat(lidChatId).currentFieldId, 'language', 'El 437 debe poder iniciar su propio bot desde la identidad LID');
 
   client.emit('message_create', {
-    to: allowedChatId, fromMe: true, body: 'start bot', id: { _serialized: 'admin-start-event' }, getChat: async () => directChat,
+    to: allowedChatId, fromMe: true, body: 'iniciar bot', id: { _serialized: 'admin-start-event' }, getChat: async () => directChat,
   });
   await settleEvents();
   assert.equal(store.getContactByChat(allowedChatId).currentFieldId, 'language');
@@ -255,11 +306,35 @@ async function testWhatsAppEvents() {
 
 async function testProductionWhatsAppEvents() {
   const store = new NewCustomersStore(':memory:');
-  const service = createNewCustomersService({ store, testMode: false });
+  const service = createNewCustomersService({ store, testMode: false, allowMissingMessageTimestamp: true });
   const client = new EventEmitter();
   const sent = [];
   client.sendMessage = async (...args) => { sent.push(args); };
   service.attach(client);
+
+  const historicalChatId = '14165556660@c.us';
+  client.emit('message_create', {
+    to: historicalChatId,
+    fromMe: true,
+    body: 'start bot',
+    timestamp: Math.floor(Date.now() / 1000) - 3600,
+    id: { _serialized: 'historical-admin-start' },
+    getChat: async () => ({ isGroup: false, getContact: async () => ({ number: '14165556660', isMyContact: false }) }),
+  });
+  await settleEvents();
+  assert.equal(store.getContactByChat(historicalChatId), null, 'Un start bot histórico no debe reabrir chats al vincular WhatsApp');
+
+  const historicalIncomingChatId = '14165556659@c.us';
+  client.emit('message', {
+    from: historicalIncomingChatId,
+    fromMe: false,
+    body: 'Mensaje antiguo',
+    timestamp: Math.floor(Date.now() / 1000) - 3600,
+    id: { _serialized: 'historical-incoming-message' },
+    getChat: async () => ({ isGroup: false, getContact: async () => ({ number: '14165556659', isMyContact: false }) }),
+  });
+  await settleEvents();
+  assert.equal(store.getContactByChat(historicalIncomingChatId), null, 'Un mensaje entrante histórico no debe iniciar el bot al vincular WhatsApp');
 
   const savedChatId = '14165556661@c.us';
   client.emit('message', {
@@ -285,6 +360,29 @@ async function testProductionWhatsAppEvents() {
   assert.equal(store.getContactByChat(newChatId).currentFieldId, 'language');
   assert.match(sent.at(-1)[1], /English or Spanish/i);
 
+  const commandChatId = '14165556663@c.us';
+  const commandDirectChat = { isGroup: false, getContact: async () => ({ number: '14165556663', isMyContact: false }) };
+  client.emit('message', {
+    from: commandChatId,
+    fromMe: false,
+    body: 'start bot',
+    id: { _serialized: 'production-new-command-1' },
+    getChat: async () => commandDirectChat,
+  });
+  await settleEvents();
+  assert.equal(store.getContactByChat(commandChatId).currentFieldId, 'language', 'Cualquier texto de un contacto nuevo debe iniciar el bot');
+  assert.match(sent.at(-1)[1], /English or Spanish/i);
+  client.emit('message', {
+    from: commandChatId,
+    fromMe: false,
+    body: 'Español',
+    id: { _serialized: 'production-new-command-2' },
+    getChat: async () => commandDirectChat,
+  });
+  await settleEvents();
+  assert.equal(store.getContactByChat(commandChatId).currentFieldId, 'occupants', 'La respuesta de idioma debe avanzar después de la bienvenida');
+  assert.match(sent.at(-1)[1], /una o dos personas/i);
+
   client.emit('message_create', {
     to: newChatId,
     fromMe: true,
@@ -309,6 +407,11 @@ function testManagedInventory() {
     '17-hilldowntree-1',
     '17-hilldowntree-2',
   ]);
+  const huntingwood = properties.find((property) => property.id === '11-huntingwood');
+  assert.deepEqual(huntingwood.prices, { 1: 1000, 2: 1200 },
+    '11 Huntingwood debe conservar $1,000 para una persona y $1,200 para una pareja');
+  assert.equal(huntingwood.mediaItems.length, 1);
+  assert.equal(huntingwood.mediaItems[0].mediaPath, 'web/assets/new-customers/11-huntingwood.jpg');
 
   const edited = store.updateProperty('14-hayden', { available: false, prices: { 1: 875 } });
   assert.equal(edited.available, false);
@@ -325,6 +428,110 @@ function testManagedInventory() {
   assert.equal(store.getContactByChat(chatId).matchIds.includes('14-hayden'), false,
     'Una oferta no disponible nunca debe recomendarse');
   store.close();
+}
+
+async function testSelectedPropertyMedia() {
+  const cases = [
+    {
+      option: '1',
+      occupants: '1 persona',
+      parking: 'no',
+      propertyId: '11-huntingwood',
+      filename: '11-huntingwood.jpg',
+      price: '$1,000 CAD',
+      hash: '8E978BDCEE3414690FF4B3DDB793755623A65FAE83BFBEF658F999F13290E7B9',
+    },
+    {
+      option: '1',
+      occupants: '2 personas',
+      parking: 'sí',
+      propertyId: '11-huntingwood',
+      filename: '11-huntingwood.jpg',
+      price: '$1,200 CAD',
+      hash: '8E978BDCEE3414690FF4B3DDB793755623A65FAE83BFBEF658F999F13290E7B9',
+    },
+    {
+      option: '3',
+      occupants: '1 persona',
+      parking: 'no',
+      propertyId: '152-royal-palm-2',
+      filename: '152-royal-palm-room-2.jpg',
+      price: '$900 CAD',
+      hash: '4B5AB51EE22074215182386873113344822D9AE1184BA6A1A5022ECF3BD45AEB',
+    },
+    {
+      option: '4',
+      occupants: '1 persona',
+      parking: 'no',
+      propertyId: '152-royal-palm-1',
+      filename: '152-royal-palm-room-1.jpg',
+      price: '$1,000 CAD',
+      hash: '8F0BD87CF7602D763E0B25FBCA5173DFD329AE34D7348F4313F1AACD72A4C53B',
+    },
+  ];
+
+  for (const [index, expected] of cases.entries()) {
+    const store = new NewCustomersStore(':memory:');
+    const service = createNewCustomersService({ store, mediaFactory: (filename) => ({ filename }) });
+    const chatId = `1416555899${index}@c.us`;
+    const sent = [];
+    const client = { sendMessage: async (...args) => { sent.push(args); } };
+
+    service.activateChat({ chatId, messageId: `media-${index}-start` });
+    service.handleIncoming({ chatId, text: 'Español', messageId: `media-${index}-1` });
+    service.handleIncoming({ chatId, text: expected.occupants, messageId: `media-${index}-2` });
+    service.handleIncoming({ chatId, text: expected.parking, messageId: `media-${index}-3` });
+    service.handleIncoming({ chatId, text: '1 de septiembre', messageId: `media-${index}-4` });
+    await service.flushOutbox(client);
+
+    assert.equal(sent.some((entry) => typeof entry[1] === 'object'), false,
+      'No debe salir ninguna foto junto con la lista de ubicaciones');
+    assert.doesNotMatch(sent.filter((entry) => typeof entry[1] === 'string').map((entry) => entry[1]).join('\n'), /\$|Precio:/i);
+
+    const sentBeforeSelection = sent.length;
+    service.handleIncoming({ chatId, text: expected.option, messageId: `media-${index}-5` });
+    await service.flushOutbox(client);
+
+    const contact = store.getContactByChat(chatId);
+    assert.equal(contact.answers.selected_property_id, expected.propertyId);
+    const selectedOutput = sent.slice(sentBeforeSelection);
+    const photos = selectedOutput.filter((entry) => typeof entry[1] === 'object');
+    assert.equal(photos.length, 1, 'Debe enviarse solamente la foto de la habitación seleccionada');
+    const textMessages = selectedOutput.filter((entry) => typeof entry[1] === 'string').map((entry) => entry[1]);
+    assert.equal(textMessages.length, 1, 'La información no debe duplicarse en un mensaje separado cuando existe foto');
+    assert.match(textMessages[0], /agendar una visita/i);
+    assert.doesNotMatch(textMessages[0], /Precio:|Precio para|\$|Huntingwood|Royal Palm/);
+    assert.ok(photos[0][1].filename.endsWith(expected.filename));
+    assert.match(photos[0][2].caption, new RegExp(expected.price.replace('$', '\\$')));
+    if (expected.propertyId === '11-huntingwood') {
+      const huntingwoodOutput = [
+        ...selectedOutput.filter((entry) => typeof entry[1] === 'string').map((entry) => entry[1]),
+        photos[0][2].caption,
+      ].join('\n');
+      assert.match(huntingwoodOutput, /Precio para una persona: \*\$1,000 CAD\*/);
+      assert.match(huntingwoodOutput, /Precio para una pareja: \*\$1,200 CAD\*/);
+      assert.doesNotMatch(huntingwoodOutput, /pareja\s*-\s*\$1,000/i,
+        'El precio de una persona nunca debe parecer aplicable a una pareja');
+    }
+    const digest = crypto.createHash('sha256').update(fs.readFileSync(photos[0][1].filename)).digest('hex').toUpperCase();
+    assert.equal(digest, expected.hash, `La foto de ${expected.propertyId} debe corresponder a esa habitación`);
+    store.close();
+  }
+
+  const textStore = new NewCustomersStore(':memory:');
+  const textService = createNewCustomersService({ store: textStore });
+  const textChatId = '14165558995@c.us';
+  textService.activateChat({ chatId: textChatId, messageId: 'no-photo-start' });
+  ['Español', '1 persona', 'no', '1 de septiembre', '5'].forEach((text, index) => {
+    textService.handleIncoming({ chatId: textChatId, text, messageId: `no-photo-${index + 1}` });
+  });
+  const textContact = textStore.getContactByChat(textChatId);
+  const noPhotoOutput = textStore.pendingOutbox(30).filter((message) => message.contactId === textContact.id).slice(-2);
+  assert.equal(noPhotoOutput.filter((message) => message.mediaPath).length, 0);
+  assert.match(noPhotoOutput[0].body, /17 Hilldowntree.+\$850 CAD/s,
+    'Sin foto debe conservarse un mensaje de texto con la información de la habitación');
+  assert.match(noPhotoOutput[1].body, /agendar una visita/i);
+  textStore.close();
 }
 
 async function main() {
@@ -348,6 +555,7 @@ async function main() {
 
   testManagedInventory();
   testHumanHandoffAndCancellation();
+  await testSelectedPropertyMedia();
   await testWhatsAppEvents();
   await testProductionWhatsAppEvents();
   const contactId = await testConversation(service);
@@ -361,6 +569,7 @@ async function main() {
     ['/api/new-customers-info/contacts', 'application/json'], ['/api/new-customers-info/properties', 'application/json'],
     ['/api/new-customers-info/appointment-settings', 'application/json'], ['/api/new-customers-info/appointments', 'application/json'],
     ['/assets/new-customers/14-hayden.jpg', 'image/jpeg'],
+    ['/assets/new-customers/11-huntingwood.jpg', 'image/jpeg'],
   ];
   try {
     for (const [route, expectedType] of checks) {
@@ -372,6 +581,8 @@ async function main() {
         assert.match(page, /Confort Place New Customers Info/);
         assert.match(page, /Disponibilidad de casas/);
         assert.match(page, /Disponibilidad para visitas/);
+        assert.match(page, /addAppointmentWindowButton/);
+        assert.match(page, /Agregar horario/);
       }
       if (route === '/reminders') assert.match(await response.text(), /Reminder Control/);
     }
@@ -381,6 +592,7 @@ async function main() {
     assert.deepEqual(policy.policy.adminNumbers, ['4378781645']);
     assert.equal(policy.stopCommand, 'stop bot');
     assert.equal(policy.activationCommand, 'start bot');
+    assert.deepEqual(policy.activationCommands, ['start bot', 'iniciar bot']);
     const settingsResponse = await fetch(`http://127.0.0.1:${port}/api/settings`);
     const persistedSettings = await settingsResponse.json();
     assert.equal(persistedSettings.newCustomersTestMode, false);
@@ -416,21 +628,39 @@ async function main() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        startDate: '2026-08-18', endDate: '2026-08-31', weekdays: [2, 3, 4, 5],
+        startDate: '2026-08-18', endDate: '2026-08-31', weekdays: [0, 1, 2, 3, 4, 5, 6],
         timeWindows: [
-          { id: 'morning', start: '10:00', end: '13:00' },
-          { id: 'evening', start: '18:00', end: '20:00' },
+          { id: 'weekday-evening', start: '18:00', end: '21:00', weekdays: [1, 2, 3, 4, 5] },
+          { id: 'weekend-afternoon', start: '13:00', end: '18:00', weekdays: [0, 6] },
         ],
       }),
     });
     assert.equal(settingsUpdate.status, 200);
     const savedSettings = (await settingsUpdate.json()).settings;
-    assert.deepEqual(savedSettings.weekdays, [2, 3, 4, 5]);
-    assert.deepEqual(savedSettings.timeWindows.map((window) => [window.start, window.end]), [['10:00', '13:00'], ['18:00', '20:00']]);
+    assert.deepEqual(savedSettings.weekdays, [0, 1, 2, 3, 4, 5, 6]);
+    assert.deepEqual(savedSettings.timeWindows, [
+      { id: 'weekday-evening', start: '18:00', end: '21:00', weekdays: [1, 2, 3, 4, 5] },
+      { id: 'weekend-afternoon', start: '13:00', end: '18:00', weekdays: [0, 6] },
+    ]);
+    const daySpecificAvailability = service.store.getAppointmentAvailability();
+    const thursdayTimes = daySpecificAvailability.dates.find((entry) => entry.date === '2026-08-20').times.map((slot) => slot.time);
+    const saturdayTimes = daySpecificAvailability.dates.find((entry) => entry.date === '2026-08-22').times.map((slot) => slot.time);
+    assert.deepEqual(thursdayTimes, ['18:00', '18:30', '19:00', '19:30', '20:00', '20:30']);
+    assert.deepEqual(saturdayTimes, ['13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30']);
     const appointmentsResponse = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/appointments?status=SCHEDULED`);
     const appointments = (await appointmentsResponse.json()).appointments;
     assert.equal(appointments.length, 1);
     assert.equal(appointments[0].contactId, contactId);
+
+    const clearWindowsResponse = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/appointment-settings`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timeWindows: [] }),
+    });
+    assert.equal(clearWindowsResponse.status, 200, 'El dashboard debe permitir borrar todos los horarios');
+    assert.deepEqual((await clearWindowsResponse.json()).settings.timeWindows, []);
+    assert.deepEqual(service.store.getAppointmentAvailability().dates, [],
+      'Sin horarios guardados el bot no debe ofrecer fechas ni horas de visita');
 
     const deleteResponse = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/contacts/${contactId}`, { method: 'DELETE' });
     assert.equal(deleteResponse.status, 200);
