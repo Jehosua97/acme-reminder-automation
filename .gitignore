@@ -3,6 +3,7 @@ node_modules/
 .wwebjs_cache/
 runtime/
 data/reminders.json
+data/new-customers-info.sqlite*
 data/uploads/
 data/backups/
 tools/

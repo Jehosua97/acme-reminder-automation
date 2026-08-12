@@ -8,7 +8,8 @@
     "send": "node scripts/enviar_programados.js",
     "send:auto": "node scripts/enviar_programados.js --auto --headless",
     "service": "node scripts/enviar_programados.js --service --headless",
-    "web": "node scripts/web_server.js"
+    "web": "node scripts/web_server.js",
+    "test": "node scripts/test_web_routes.js"
   },
   "dependencies": {
     "express": "^5.2.1",

@@ -4,6 +4,8 @@ Local web dashboard and Windows service automation for scheduled WhatsApp group 
 
 This project manages recurring operational reminders for Confort Place. Operators use a browser dashboard to create, edit, filter, activate, and monitor reminders. A local WhatsApp Web worker sends scheduled messages to WhatsApp groups and records status/logs locally.
 
+It also includes the `new-customers-info` workflow for direct chats only. In production it starts automatically when an unsaved WhatsApp contact sends any message; saved contacts and groups are excluded. The number `4378781645` is also authorized to run `Stop bot` and `start bot` for its own conversation. The same WhatsApp client asks for language, number of occupants, parking, and move-in date, persists every step in SQLite, and presents matching rooms in the web dashboard. The dashboard manages availability, capacity, parking, prices, and photos for the six authorized offers; disabled offers are never recommended. Customers can schedule, modify, or cancel a property visit at an available exact 30-minute time within dashboard-controlled dates and time windows. Occupied times are removed from availability. Customers can also request a human handoff that pauses the bot for the chat. An administrator can delete a contact and its associated history or appointment, send `Stop bot` to stop only that conversation, or send `start bot` to restart it.
+
 > Important: this project uses `whatsapp-web.js`, an unofficial WhatsApp Web automation library. It is useful for group reminders, but it is not the official WhatsApp Business API and it carries account/session risk.
 
 ## Current architecture
@@ -27,6 +29,11 @@ Windows services:
 ## Features
 
 - Web dashboard for reminder management.
+- New-customer dashboard at `/` and reminder management at `/reminders`.
+- Persistent, bilingual customer qualification with a SQLite outbox and duplicate-message protection.
+- Fixed six-offer inventory with dashboard-controlled availability, prices, parking, capacity, and room photos.
+- Configurable visit calendar with persistent appointments, rescheduling, cancellation, and human-chat handoff.
+- Safe dashboard deletion of a customer together with that customer's conversation data and appointment.
 - Local JSON persistence in `data/reminders.json`.
 - WhatsApp group sending through `whatsapp-web.js`.
 - Weekly, monthly, and interval schedules.

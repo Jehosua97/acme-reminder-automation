@@ -2,5 +2,6 @@
   "mode": "production",
   "timeStepMinutes": 30,
   "serviceIntervalMs": 300000,
-  "sendWindowMinutes": 10
+  "sendWindowMinutes": 10,
+  "newCustomersTestMode": false
 }

@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Confort Place New Customers Info</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/new-customers.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Confort Place New Customers Info</h1>
+      <p>Panel de administración de personas que buscan habitación.</p>
+    </div>
+    <div class="top-actions">
+      <div class="status-pill" id="workerStatus">Servicio: revisando...</div>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Secciones principales">
+    <a class="tab active" href="/">Clientes nuevos</a>
+    <a class="tab" href="/reminders">Recordatorios</a>
+    <a class="tab" href="/reminders#system">Estado del sistema</a>
+  </nav>
+
+  <main>
+    <div class="customer-section-tabs" role="tablist" aria-label="Administración de clientes nuevos">
+      <button id="showContactsButton" class="customer-section-tab active" type="button" role="tab" aria-selected="true">Contactos</button>
+      <button id="showPropertiesButton" class="customer-section-tab" type="button" role="tab" aria-selected="false">Disponibilidad de casas</button>
+      <button id="showAppointmentsButton" class="customer-section-tab" type="button" role="tab" aria-selected="false">Citas</button>
+    </div>
+
+    <section id="contactsView" class="view active">
+      <div class="status-grid customer-summary">
+        <article class="status-card">
+          <span class="status-icon neutral">#</span>
+          <div><h2>Total de contactos</h2><p id="metricTotal">--</p><small>Registrados por el bot</small></div>
+        </article>
+        <article class="status-card">
+          <span class="status-icon neutral">↻</span>
+          <div><h2>Conversaciones activas</h2><p id="metricActive">--</p><small>Esperando respuestas</small></div>
+        </article>
+        <article class="status-card ok">
+          <span class="status-icon">●</span>
+          <div><h2>Interesados</h2><p id="metricInterested">--</p><small>Incluye convertidos</small></div>
+        </article>
+        <article class="status-card paused">
+          <span class="status-icon">!</span>
+          <div><h2>Necesitan atención</h2><p id="metricAttention">--</p><small>Revisión o seguimiento</small></div>
+        </article>
+      </div>
+
+      <div class="toolbar">
+        <label class="search">
+          Buscar
+          <input id="searchInput" type="search" placeholder="Nombre, teléfono o mensaje" />
+        </label>
+        <label>
+          Estado
+          <select id="statusFilter">
+            <option value="">Todos</option>
+            <option value="NUEVO">Nuevo</option>
+            <option value="EN_CONVERSACION">En conversación</option>
+            <option value="OPCIONES_ENVIADAS">Opciones enviadas</option>
+            <option value="INTERESADO">Interesado</option>
+            <option value="CITA_AGENDADA">Cita agendada</option>
+            <option value="ATENCION_HUMANA">Atención humana</option>
+            <option value="NO_INTERESADO">No interesado</option>
+            <option value="SEGUIMIENTO">Seguimiento</option>
+            <option value="CONVERTIDO">Convertido</option>
+            <option value="REQUIERE_ATENCION">Requiere atención</option>
+            <option value="BOT_DETENIDO">Bot detenido</option>
+          </select>
+        </label>
+        <button id="refreshButton" type="button">Actualizar</button>
+      </div>
+
+      <div class="hint">
+        <strong id="resultCount">Cargando expedientes...</strong>
+        Modo producción: el bot se activa automáticamente para números no guardados, únicamente en chats individuales. El admin puede enviar <code>Stop bot</code> para detener un chat y <code>start bot</code> para reiniciarlo.
+      </div>
+      <div id="contactsRuntimeNotice" class="property-runtime-notice hidden">
+        El servicio web necesita reiniciarse para habilitar el borrado de contactos.
+      </div>
+
+      <div class="table-shell customer-table-shell">
+        <table class="reminders-table customers-table">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Teléfono</th>
+              <th>Idioma</th>
+              <th>Personas</th>
+              <th>Parking</th>
+              <th>Fecha de entrada</th>
+              <th>Estado</th>
+              <th>Etapa del bot</th>
+              <th>Cita</th>
+              <th>Último mensaje</th>
+              <th>Actualizado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="contactsTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="propertiesView" class="view">
+      <div class="status-grid customer-summary property-summary">
+        <article class="status-card ok">
+          <span class="status-icon">●</span>
+          <div><h2>Ofertas disponibles</h2><p id="metricAvailableProperties">--</p><small>El bot puede ofrecerlas</small></div>
+        </article>
+        <article class="status-card paused">
+          <span class="status-icon">—</span>
+          <div><h2>No disponibles</h2><p id="metricUnavailableProperties">--</p><small>Ocultas para clientes</small></div>
+        </article>
+        <article class="status-card">
+          <span class="status-icon neutral">▧</span>
+          <div><h2>Fotos configuradas</h2><p id="metricPropertyImages">--</p><small>Se envían por WhatsApp</small></div>
+        </article>
+      </div>
+
+      <div class="toolbar property-toolbar">
+        <div>
+          <strong>Inventario autorizado</strong>
+          <span>Solo estas seis ofertas pueden ser recomendadas por el bot.</span>
+        </div>
+        <button id="refreshPropertiesButton" type="button">Actualizar disponibilidad</button>
+      </div>
+
+      <div class="hint">
+        Desactiva una oferta para retirarla inmediatamente de las recomendaciones nuevas. Los cambios de precio, capacidad, parking y fotos se aplican a la siguiente respuesta del bot.
+      </div>
+      <div id="propertiesRuntimeNotice" class="property-runtime-notice hidden">
+        El servicio web necesita reiniciarse para habilitar la edición. El inventario se muestra en modo de solo lectura.
+      </div>
+
+      <div class="table-shell property-table-shell">
+        <table class="reminders-table properties-table">
+          <thead>
+            <tr>
+              <th>Disponible</th>
+              <th>Dirección</th>
+              <th>Habitación</th>
+              <th>Personas</th>
+              <th>Parking</th>
+              <th>Precio 1 persona</th>
+              <th>Precio 2 personas</th>
+              <th>Fotos</th>
+              <th>Actualizado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="propertiesTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="appointmentsView" class="view">
+      <div class="status-grid customer-summary appointment-summary">
+        <article class="status-card ok">
+          <span class="status-icon">✓</span>
+          <div><h2>Citas agendadas</h2><p id="metricScheduledAppointments">--</p><small>Visitas activas</small></div>
+        </article>
+        <article class="status-card">
+          <span class="status-icon neutral">▣</span>
+          <div><h2>Periodo disponible</h2><p id="metricAppointmentRange">--</p><small id="metricAppointmentDays">Días configurados</small></div>
+        </article>
+        <article class="status-card">
+          <span class="status-icon neutral">◷</span>
+          <div><h2>Horarios</h2><p id="metricAppointmentWindows">--</p><small>Ventanas de visita</small></div>
+        </article>
+      </div>
+
+      <div id="appointmentsRuntimeNotice" class="property-runtime-notice hidden">
+        El servicio web necesita reiniciarse para habilitar la agenda y mostrar las citas.
+      </div>
+
+      <form id="appointmentSettingsForm" class="appointment-settings-card">
+        <div class="appointment-settings-header">
+          <div>
+            <h2>Disponibilidad para visitas</h2>
+            <p>Estas son las fechas y ventanas disponibles; el bot ofrecerá horas exactas cada 30 minutos.</p>
+          </div>
+          <button id="saveAppointmentSettingsButton" type="submit">Guardar disponibilidad</button>
+        </div>
+
+        <div class="appointment-settings-grid">
+          <label>
+            Disponible desde
+            <input id="appointmentStartDate" type="date" required />
+          </label>
+          <label>
+            Disponible hasta
+            <input id="appointmentEndDate" type="date" required />
+          </label>
+          <fieldset class="appointment-weekdays">
+            <legend>Días disponibles</legend>
+            <label><input type="checkbox" name="appointmentWeekday" value="1" /> Lunes</label>
+            <label><input type="checkbox" name="appointmentWeekday" value="2" /> Martes</label>
+            <label><input type="checkbox" name="appointmentWeekday" value="3" /> Miércoles</label>
+            <label><input type="checkbox" name="appointmentWeekday" value="4" /> Jueves</label>
+            <label><input type="checkbox" name="appointmentWeekday" value="5" /> Viernes</label>
+            <label><input type="checkbox" name="appointmentWeekday" value="6" /> Sábado</label>
+            <label><input type="checkbox" name="appointmentWeekday" value="0" /> Domingo</label>
+          </fieldset>
+          <div class="appointment-windows-editor">
+            <strong>Horarios disponibles</strong>
+            <div class="appointment-window-row">
+              <span>Horario 1</span>
+              <label>Desde <input id="appointmentWindowOneStart" type="time" required /></label>
+              <label>Hasta <input id="appointmentWindowOneEnd" type="time" required /></label>
+            </div>
+            <div class="appointment-window-row">
+              <span>Horario 2</span>
+              <label>Desde <input id="appointmentWindowTwoStart" type="time" required /></label>
+              <label>Hasta <input id="appointmentWindowTwoEnd" type="time" required /></label>
+            </div>
+          </div>
+        </div>
+      </form>
+
+      <div class="toolbar property-toolbar appointment-list-toolbar">
+        <div>
+          <strong>Visitas agendadas</strong>
+          <span>El bot recuerda esta información cuando el cliente vuelve a escribir.</span>
+        </div>
+        <button id="refreshAppointmentsButton" type="button">Actualizar citas</button>
+      </div>
+
+      <div class="table-shell appointment-table-shell">
+        <table class="reminders-table appointments-table">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Teléfono</th>
+              <th>Casa</th>
+              <th>Habitación</th>
+              <th>Fecha</th>
+              <th>Hora exacta</th>
+              <th>Estado</th>
+              <th>Agendada</th>
+            </tr>
+          </thead>
+          <tbody id="appointmentsTable"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="contactDetailDialog" class="modal customer-modal">
+    <form method="dialog">
+      <header class="modal-header">
+        <div>
+          <h2 id="detailTitle">Detalle del cliente</h2>
+          <p id="detailSubtitle"></p>
+        </div>
+        <button type="submit" class="secondary">Cerrar</button>
+      </header>
+      <div id="detailContent"></div>
+    </form>
+  </dialog>
+
+  <dialog id="propertyDialog" class="modal property-modal">
+    <form id="propertyForm">
+      <header class="modal-header">
+        <div>
+          <h2 id="propertyDialogTitle">Editar oferta</h2>
+          <p id="propertyDialogSubtitle">Los cambios controlan lo que el bot puede recomendar.</p>
+        </div>
+        <button id="closePropertyDialog" type="button" class="secondary">Cerrar</button>
+      </header>
+
+      <input id="propertyId" type="hidden" />
+      <div class="property-form-grid">
+        <label class="property-wide-field">
+          Dirección
+          <input id="propertyAddress" type="text" maxlength="250" required />
+        </label>
+        <label>
+          Habitación
+          <input id="propertyRoom" type="text" maxlength="150" required />
+        </label>
+        <label>
+          Disponibilidad
+          <select id="propertyAvailable" required>
+            <option value="true">Disponible</option>
+            <option value="false">No disponible</option>
+          </select>
+        </label>
+        <label>
+          Capacidad máxima
+          <select id="propertyMaxOccupants" required>
+            <option value="1">1 persona</option>
+            <option value="2">2 personas</option>
+          </select>
+        </label>
+        <label>
+          Espacios de parking
+          <input id="propertyParkingSpaces" type="number" min="0" max="5" step="1" required />
+        </label>
+        <label>
+          Precio para 1 persona (CAD)
+          <input id="propertyPriceOne" type="number" min="1" max="100000" step="1" required />
+        </label>
+        <label id="propertyPriceTwoField">
+          Precio para 2 personas (CAD)
+          <input id="propertyPriceTwo" type="number" min="1" max="100000" step="1" />
+        </label>
+      </div>
+
+      <section class="property-images-editor">
+        <div>
+          <h3>Fotos de la oferta</h3>
+          <p>Puedes conservar, quitar o adjuntar imágenes JPG, PNG, WEBP o GIF. Máximo 8 fotos y 12 MB por archivo.</p>
+        </div>
+        <div id="propertyImagesPreview" class="property-images-preview"></div>
+        <label class="property-upload-field">
+          Adjuntar nuevas fotos
+          <input id="propertyImages" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple />
+        </label>
+      </section>
+
+      <div class="property-form-actions">
+        <button id="cancelPropertyButton" type="button" class="secondary">Cancelar</button>
+        <button id="savePropertyButton" type="submit">Guardar cambios</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="/dashboard.js"></script>
+</body>
+</html>

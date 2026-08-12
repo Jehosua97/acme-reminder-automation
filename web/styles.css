@@ -192,6 +192,7 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   color: #1f2937;
   border: 1px solid var(--line);
 }
+.tabs a.tab { display: inline-flex; align-items: center; text-decoration: none; }
 .tabs .tab.active {
   background: var(--blue);
   color: #ffffff;

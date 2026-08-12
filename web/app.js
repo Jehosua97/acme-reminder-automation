@@ -1959,15 +1959,25 @@ async function activateMode(mode) {
   }
 }
 
-document.querySelectorAll('.tab').forEach((btn) => {
+function activateTopLevelView(viewName) {
+  const button = document.querySelector(`.tab[data-view="${viewName}"]`);
+  const view = $(`${viewName}View`);
+  if (!button || !view) return;
+  document.querySelectorAll('.tab[data-view]').forEach((item) => item.classList.remove('active'));
+  document.querySelectorAll('.view').forEach((item) => item.classList.remove('active'));
+  button.classList.add('active');
+  view.classList.add('active');
+  if (viewName === 'system') loadStatus();
+}
+
+document.querySelectorAll('.tab[data-view]').forEach((btn) => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
-    document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
-    btn.classList.add('active');
-    $(`${btn.dataset.view}View`).classList.add('active');
-    if (btn.dataset.view === 'system') loadStatus();
+    activateTopLevelView(btn.dataset.view);
+    window.history.replaceState(null, '', `#${btn.dataset.view}`);
   });
 });
+
+if (window.location.hash === '#system') activateTopLevelView('system');
 
 $('houseFilter').addEventListener('change', (event) => {
   const checkbox = event.target.closest('input[type="checkbox"]');

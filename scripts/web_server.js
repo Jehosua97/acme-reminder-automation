@@ -3,37 +3,18 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
-const {
-  readWorkbookLike,
-  readSettings,
-  writeSettings,
-  createReminder,
-  createCleaningRotation,
-  updateReminder,
-  deleteReminder,
-  deleteReminders,
-  updateRemindersActive,
-  updateCleaningRotation,
-  deleteCleaningRotation,
-  deleteCategory,
-  deleteHouse,
-} = require('./data_store');
+const store = require('./data_store');
+const { createReminderRouter } = require('./modules/reminders/routes');
+const { createSystemService } = require('./modules/system/service');
+const { createSystemRouter } = require('./modules/system/routes');
+const { createNewCustomersInfoRouter } = require('./modules/new-customers-info/routes');
+const { createNewCustomersService } = require('./modules/new-customers-info/service');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const RUNTIME = path.join(PROJECT_ROOT, 'runtime');
 const WEB_ROOT = path.join(PROJECT_ROOT, 'web');
 const UPLOAD_ROOT = path.join(PROJECT_ROOT, 'data', 'uploads');
-const PAUSE_FILE = path.join(RUNTIME, 'sistema_pausado.flag');
-const START_BACKGROUND_SCRIPT = path.join(__dirname, 'IniciarServicioWhatsAppBackground.ps1');
-const STOP_SCRIPT = path.join(__dirname, 'DetenerServicioWhatsApp.ps1');
-
 const PORT = Number(process.env.PORT || 3000);
-const app = express();
-
-app.use(express.json({ limit: '18mb' }));
-app.use(express.static(WEB_ROOT));
-app.use('/uploads', express.static(UPLOAD_ROOT));
 
 function safeImageExtension(mime, originalName = '') {
   const lower = String(originalName || '').toLowerCase();
@@ -48,21 +29,16 @@ function saveUploadedImage(body = {}) {
   const dataUrl = String(body.dataUrl || '');
   const match = dataUrl.match(/^data:(image\/(?:png|jpe?g|webp|gif));base64,([A-Za-z0-9+/=]+)$/i);
   if (!match) throw new Error('Imagen invalida. Usa PNG, JPG, WEBP o GIF.');
-
   const mime = match[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : match[1].toLowerCase();
   const extension = safeImageExtension(mime, body.name);
   if (!extension) throw new Error('Formato de imagen no soportado.');
-
   const buffer = Buffer.from(match[2], 'base64');
-  const maxBytes = 12 * 1024 * 1024;
   if (!buffer.length) throw new Error('La imagen esta vacia.');
-  if (buffer.length > maxBytes) throw new Error('La imagen es demasiado grande. Maximo 12 MB.');
-
+  if (buffer.length > 12 * 1024 * 1024) throw new Error('La imagen es demasiado grande. Maximo 12 MB.');
   if (!fs.existsSync(UPLOAD_ROOT)) fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
   const basename = `image-${Date.now()}-${Math.random().toString(16).slice(2)}${extension}`;
   const fullPath = path.join(UPLOAD_ROOT, basename);
   fs.writeFileSync(fullPath, buffer);
-
   return {
     mediaPath: path.relative(PROJECT_ROOT, fullPath).replace(/\\/g, '/'),
     mediaName: String(body.name || basename).trim() || basename,
@@ -71,269 +47,39 @@ function saveUploadedImage(body = {}) {
   };
 }
 
-function tail(file, lines = 120) {
-  const full = path.join(RUNTIME, file);
-  if (!fs.existsSync(full)) return '';
-  const content = fs.readFileSync(full, 'utf8');
-  return content
-    .split(/\r?\n/)
-    .filter((line) => (
-      !/Data source:/i.test(line) &&
-      !/Archivo:\s*.*RecordatoriosWhatsApp/i.test(line)
-    ))
-    .slice(-lines)
-    .join('\n');
-}
-
-function isPidRunning(pid) {
-  if (!pid) return false;
-  const result = spawnSync('powershell.exe', [
-    '-NoProfile',
-    '-Command',
-    `if (Get-Process -Id ${Number(pid)} -ErrorAction SilentlyContinue) { "YES" } else { "NO" }`,
-  ], { encoding: 'utf8' });
-  return result.stdout.trim() === 'YES';
-}
-
-function serviceInfo() {
-  const lockPath = path.join(RUNTIME, 'servicio_programados.lock');
-  let pid = null;
-  let lock = '';
-  if (fs.existsSync(lockPath)) {
-    lock = fs.readFileSync(lockPath, 'utf8');
-    const match = lock.match(/pid=(\d+)/);
-    if (match) pid = Number(match[1]);
-  }
-  return {
-    running: isPidRunning(pid),
-    paused: fs.existsSync(PAUSE_FILE),
-    pid,
-    lock,
-    status: tail('estado_programados.txt', 10),
-    serviceLog: tail('servicio_programados.log', 160),
-    results: tail('resultados_programados.tsv', 80),
-    sentLog: tail('envios_programados_log.tsv', 80),
-    autoLog: tail('auto_programados.log', 80),
-    settings: readSettings(),
-  };
-}
-
-function startServiceInBackground() {
-  return spawnSync('powershell.exe', [
-    '-NoProfile',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-File',
-    START_BACKGROUND_SCRIPT,
-  ], { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 30000 });
-}
-
-app.get('/api/reminders', (req, res) => {
-  try {
-    res.json(readWorkbookLike());
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/settings', (req, res) => {
-  try {
-    res.json(readSettings());
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/settings', (req, res) => {
-  try {
-    res.json({ ok: true, settings: writeSettings(req.body || {}) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/reminders', (req, res) => {
-  try {
-    res.json({ ok: true, workbook: createReminder(req.body || {}) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/uploads/image', (req, res) => {
-  try {
-    res.json({ ok: true, image: saveUploadedImage(req.body || {}) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/cleaning-rotations', (req, res) => {
-  try {
-    res.json({ ok: true, workbook: createCleaningRotation(req.body || {}) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.patch('/api/reminders/:row', (req, res) => {
-  try {
-    const row = Number(req.params.row);
-    if (!Number.isInteger(row) || row < 1) {
-      return res.status(400).json({ error: 'Id de recordatorio invalido.' });
-    }
-    res.json({ ok: true, workbook: updateReminder(row, req.body || {}) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/reminders/:row', (req, res) => {
-  try {
-    const row = Number(req.params.row);
-    if (!Number.isInteger(row) || row < 1) {
-      return res.status(400).json({ error: 'Id de recordatorio invalido.' });
-    }
-    res.json({ ok: true, workbook: deleteReminder(row) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/reminders/bulk-delete', (req, res) => {
-  try {
-    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
-    res.json({ ok: true, workbook: deleteReminders(rows) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/reminders/bulk-active', (req, res) => {
-  try {
-    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
-    const activo = req.body?.activo === 'SI' ? 'SI' : 'NO';
-    res.json({ ok: true, workbook: updateRemindersActive(rows, activo) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.patch('/api/cleaning-rotations/:house', (req, res) => {
-  try {
-    const house = decodeURIComponent(req.params.house || '').trim();
-    if (!house) return res.status(400).json({ error: 'Casa / grupo invalido.' });
-    res.json({ ok: true, workbook: updateCleaningRotation(house, req.body || {}) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/cleaning-rotations/:house', (req, res) => {
-  try {
-    const house = decodeURIComponent(req.params.house || '').trim();
-    if (!house) return res.status(400).json({ error: 'Casa / grupo invalido.' });
-    res.json({ ok: true, workbook: deleteCleaningRotation(house) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/categories/:category', (req, res) => {
-  try {
-    const category = decodeURIComponent(req.params.category || '').trim();
-    if (!category) return res.status(400).json({ error: 'Categoria invalida.' });
-    res.json({ ok: true, workbook: deleteCategory(category) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/houses/:house', (req, res) => {
-  try {
-    const house = decodeURIComponent(req.params.house || '').trim();
-    if (!house) return res.status(400).json({ error: 'Casa / grupo invalido.' });
-    res.json({ ok: true, workbook: deleteHouse(house) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/status', (req, res) => {
-  try {
-    res.json(serviceInfo());
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/system/pause', (req, res) => {
-  try {
-    if (!fs.existsSync(RUNTIME)) fs.mkdirSync(RUNTIME, { recursive: true });
-    fs.writeFileSync(PAUSE_FILE, `paused=${new Date().toISOString()}\n`, 'utf8');
-    res.json({ ok: true, message: 'Sistema pausado.', status: serviceInfo() });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/system/resume', (req, res) => {
-  try {
-    if (fs.existsSync(PAUSE_FILE)) fs.unlinkSync(PAUSE_FILE);
-    res.json({ ok: true, message: 'Sistema reanudado.', status: serviceInfo() });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/service/start', (req, res) => {
-  const current = serviceInfo();
-  if (current.running) return res.json({ ok: true, message: 'Servicio ya esta corriendo.', status: current });
-
-  const result = startServiceInBackground();
-  if (result.status !== 0) {
-    return res.status(500).json({
-      ok: false,
-      message: 'No se pudo iniciar el servicio.',
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
-  }
-
-  res.json({ ok: true, message: 'Servicio iniciado.', stdout: result.stdout, status: serviceInfo() });
-});
-
-app.post('/api/service/stop', (req, res) => {
-  const result = spawnSync('powershell.exe', [
-    '-NoProfile',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-File',
-    STOP_SCRIPT,
-  ], { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 30000 });
-
-  res.json({
-    ok: result.status === 0,
-    stdout: result.stdout,
-    stderr: result.stderr,
+function createApp(options = {}) {
+  const app = express();
+  const newCustomersService = options.newCustomersService || createNewCustomersService();
+  const systemService = createSystemService({
+    projectRoot: PROJECT_ROOT,
+    runtime: RUNTIME,
+    scriptsRoot: __dirname,
+    readSettings: store.readSettings,
   });
-});
 
-app.post('/api/service/restart', (req, res) => {
-  spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', STOP_SCRIPT], {
-    cwd: PROJECT_ROOT,
-    encoding: 'utf8',
-    timeout: 30000,
-  });
-  const result = startServiceInBackground();
-  res.json({
-    ok: result.status === 0,
-    message: result.status === 0 ? 'Servicio reiniciado.' : 'No se pudo reiniciar el servicio.',
-    stdout: result.stdout,
-    stderr: result.stderr,
-  });
-});
+  app.use(express.json({ limit: '18mb' }));
+  app.use('/uploads', express.static(UPLOAD_ROOT));
+  app.use(express.static(WEB_ROOT, { index: false }));
 
-app.listen(PORT, () => {
-  console.log(`Confort Place Reminder Web UI running at http://localhost:${PORT}`);
-});
+  app.get('/', (req, res) => res.sendFile(path.join(WEB_ROOT, 'dashboard.html')));
+  app.get('/reminders', (req, res) => res.sendFile(path.join(WEB_ROOT, 'index.html')));
+  app.get('/new-customers-info', (req, res) => res.sendFile(path.join(WEB_ROOT, 'dashboard.html')));
+
+  app.post('/api/uploads/image', (req, res) => {
+    try { res.json({ ok: true, image: saveUploadedImage(req.body || {}) }); }
+    catch (error) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.use('/api', createReminderRouter(store));
+  app.use('/api', createSystemRouter(systemService));
+  app.use('/api/new-customers-info', createNewCustomersInfoRouter(newCustomersService));
+  return app;
+}
+
+if (require.main === module) {
+  createApp().listen(PORT, () => {
+    console.log(`Confort Place Web UI running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = { createApp };
