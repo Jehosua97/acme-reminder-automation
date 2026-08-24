@@ -6,16 +6,30 @@ $RutaNode = Join-Path $Raiz 'enviar_programados.js'
 $RutaRuntime = Join-Path $Proyecto 'runtime'
 $RutaLog = Join-Path $RutaRuntime 'servicio_programados.log'
 $RutaLock = Join-Path $RutaRuntime 'servicio_programados.lock'
+$RutaSupervisorLock = Join-Path $RutaRuntime 'servicio_programados_supervisor.lock'
 $RutaSettings = Join-Path $Proyecto 'data\settings.json'
 $RutaSesion = Join-Path $Proyecto '.wwebjs_auth'
 $RutaPerfil = Join-Path $RutaSesion 'session-recordatorios-excel'
 $RutaPerfilNormalizada = $RutaPerfil -replace '\\', '/'
+$MaxLogBytes = 20MB
 
 if (-not (Test-Path -LiteralPath $RutaRuntime)) {
     New-Item -ItemType Directory -Force -Path $RutaRuntime | Out-Null
 }
 
+function Rotar-LogSiEsNecesario([string]$Ruta, [long]$MaxBytes) {
+    try {
+        $item = Get-Item -LiteralPath $Ruta -ErrorAction SilentlyContinue
+        if ($item -and $item.Length -ge $MaxBytes) {
+            $anterior = "$Ruta.previous"
+            Remove-Item -LiteralPath $anterior -Force -ErrorAction SilentlyContinue
+            Move-Item -LiteralPath $Ruta -Destination $anterior -Force
+        }
+    } catch {}
+}
+
 function Escribir-Log([string]$Mensaje) {
+    Rotar-LogSiEsNecesario -Ruta $RutaLog -MaxBytes $MaxLogBytes
     Add-Content -LiteralPath $RutaLog -Encoding UTF8 -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Mensaje"
 }
 
@@ -43,6 +57,28 @@ function Detener-ChromiumSesionWhatsApp {
             Remove-Item -LiteralPath $rutaLockPerfil -Force -ErrorAction SilentlyContinue
         }
     }
+}
+
+if (Test-Path -LiteralPath $RutaSupervisorLock) {
+    $contenidoSupervisor = Get-Content -LiteralPath $RutaSupervisorLock -ErrorAction SilentlyContinue
+    $pidSupervisorAnterior = ($contenidoSupervisor | Select-String -Pattern 'pid=(\d+)' | ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1)
+    if ($pidSupervisorAnterior) {
+        $supervisorAnterior = Get-Process -Id ([int]$pidSupervisorAnterior) -ErrorAction SilentlyContinue
+        if ($null -ne $supervisorAnterior) {
+            Escribir-Log "El supervisor ya esta activo con PID $pidSupervisorAnterior. No se inicia otro."
+            exit 0
+        }
+    }
+    Remove-Item -LiteralPath $RutaSupervisorLock -Force -ErrorAction SilentlyContinue
+}
+
+@(
+    "pid=$PID"
+    "inicio=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+) | Set-Content -LiteralPath $RutaSupervisorLock -Encoding UTF8
+
+$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -MessageData $RutaSupervisorLock -Action {
+    Remove-Item -LiteralPath $Event.MessageData -Force -ErrorAction SilentlyContinue
 }
 
 if (Test-Path -LiteralPath $RutaLock) {
@@ -123,14 +159,33 @@ while ($true) {
     $proc.StartInfo = $psi
     $proc.EnableRaisingEvents = $true
 
-    $outSub = Register-ObjectEvent -InputObject $proc -EventName OutputDataReceived -MessageData $RutaLog -Action {
+    $logOptions = @{ Path = $RutaLog; MaxBytes = $MaxLogBytes }
+    $outSub = Register-ObjectEvent -InputObject $proc -EventName OutputDataReceived -MessageData $logOptions -Action {
         if ($EventArgs.Data) {
-            Add-Content -LiteralPath $Event.MessageData -Encoding UTF8 -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') NODE OUT: $($EventArgs.Data)"
+            $eventLog = [string]$Event.MessageData.Path
+            try {
+                $item = Get-Item -LiteralPath $eventLog -ErrorAction SilentlyContinue
+                if ($item -and $item.Length -ge [long]$Event.MessageData.MaxBytes) {
+                    $previous = "$eventLog.previous"
+                    Remove-Item -LiteralPath $previous -Force -ErrorAction SilentlyContinue
+                    Move-Item -LiteralPath $eventLog -Destination $previous -Force
+                }
+            } catch {}
+            Add-Content -LiteralPath $eventLog -Encoding UTF8 -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') NODE OUT: $($EventArgs.Data)"
         }
     }
-    $errSub = Register-ObjectEvent -InputObject $proc -EventName ErrorDataReceived -MessageData $RutaLog -Action {
+    $errSub = Register-ObjectEvent -InputObject $proc -EventName ErrorDataReceived -MessageData $logOptions -Action {
         if ($EventArgs.Data) {
-            Add-Content -LiteralPath $Event.MessageData -Encoding UTF8 -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') NODE ERR: $($EventArgs.Data)"
+            $eventLog = [string]$Event.MessageData.Path
+            try {
+                $item = Get-Item -LiteralPath $eventLog -ErrorAction SilentlyContinue
+                if ($item -and $item.Length -ge [long]$Event.MessageData.MaxBytes) {
+                    $previous = "$eventLog.previous"
+                    Remove-Item -LiteralPath $previous -Force -ErrorAction SilentlyContinue
+                    Move-Item -LiteralPath $eventLog -Destination $previous -Force
+                }
+            } catch {}
+            Add-Content -LiteralPath $eventLog -Encoding UTF8 -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') NODE ERR: $($EventArgs.Data)"
         }
     }
 
@@ -184,7 +239,13 @@ while ($true) {
             continue
         }
 
-        exit $exitCode
+        # En modo permanente, una salida 0 tambien es inesperada. El supervisor
+        # solo se detiene cuando Windows termina este proceso explicitamente.
+        $reiniciosConsecutivos = 0
+        Detener-ChromiumSesionWhatsApp
+        Escribir-Log 'Node termino sin error, pero el servicio debe permanecer activo. Reintentando en 10 segundos.'
+        Start-Sleep -Seconds 10
+        continue
     }
     finally {
         Unregister-Event -SubscriptionId $outSub.Id -ErrorAction SilentlyContinue

@@ -7,14 +7,26 @@
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/new-customers.css" />
 </head>
-<body>
+<body class="new-customers-dashboard">
   <header class="topbar">
     <div>
       <h1>Confort Place New Customers Info</h1>
       <p>Panel de administración de personas que buscan habitación.</p>
     </div>
     <div class="top-actions">
+      <button id="adminHelpButton" class="customer-help-button" type="button" aria-haspopup="dialog" aria-controls="adminHelpDialog" title="Abrir guía para administradores">
+        <span class="customer-help-icon" aria-hidden="true">?</span>
+        <span class="customer-help-label">Ayuda</span>
+      </button>
+      <button id="customerModeToggle" class="customer-mode-toggle" type="button" disabled>Modo desarrollo: revisando...</button>
       <div class="status-pill" id="workerStatus">Servicio: revisando...</div>
+      <button id="customerBotPauseToggle" class="customer-bot-pause-toggle checking" type="button" disabled aria-pressed="false" title="Revisando estado del bot">
+        <span class="customer-bot-control-icon" aria-hidden="true">
+          <svg class="pause-symbol" viewBox="0 0 24 24" focusable="false"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+          <svg class="play-symbol" viewBox="0 0 24 24" focusable="false"><path d="M8 5v14l11-7z" /></svg>
+        </span>
+        <span class="customer-bot-control-label">Revisando bot...</span>
+      </button>
     </div>
   </header>
 
@@ -78,7 +90,7 @@
 
       <div class="hint">
         <strong id="resultCount">Cargando expedientes...</strong>
-        Modo producción: el bot se activa automáticamente para números no guardados, únicamente en chats individuales. El admin puede enviar <code>Stop bot</code> para detener un chat y <code>start bot</code> o <code>iniciar bot</code> para iniciarlo.
+        <span id="customerModeHelp">Revisando el modo del bot...</span>
       </div>
       <div id="contactsRuntimeNotice" class="property-runtime-notice hidden">
         El servicio web necesita reiniciarse para habilitar el borrado de contactos.
@@ -124,11 +136,14 @@
       </div>
 
       <div class="toolbar property-toolbar">
-        <div>
-          <strong>Inventario autorizado</strong>
-          <span>Solo estas seis ofertas pueden ser recomendadas por el bot.</span>
+        <div class="property-toolbar-copy">
+          <strong>Inventario de cuartos</strong>
+          <span>Administra las ofertas que el bot puede recomendar.</span>
         </div>
-        <button id="refreshPropertiesButton" type="button">Actualizar disponibilidad</button>
+        <div class="property-toolbar-actions">
+          <button id="addPropertyButton" type="button" disabled>+ Agregar cuarto</button>
+          <button id="refreshPropertiesButton" type="button" class="secondary">Actualizar inventario</button>
+        </div>
       </div>
 
       <div class="hint">
@@ -238,6 +253,101 @@
     </section>
   </main>
 
+  <dialog id="adminHelpDialog" class="modal admin-help-modal" aria-labelledby="adminHelpTitle">
+    <form method="dialog">
+      <header class="modal-header admin-help-header">
+        <div>
+          <span class="admin-help-eyebrow">Guía del administrador</span>
+          <h2 id="adminHelpTitle">Cómo funciona el bot de clientes nuevos</h2>
+          <p>Una explicación práctica para iniciar, detener y revisar el flujo.</p>
+        </div>
+        <button type="submit" class="secondary">Cerrar</button>
+      </header>
+
+      <div class="admin-help-rule">
+        <span aria-hidden="true">!</span>
+        <div>
+          <strong>Tú decides cuándo empieza.</strong>
+          <p>Recibir un mensaje nunca activa el bot. Solo comienza cuando tú escribes <code>Welcome!</code> en ese chat individual.</p>
+        </div>
+      </div>
+
+      <section class="admin-help-section" aria-labelledby="adminFlowTitle">
+        <div class="admin-help-section-title">
+          <span>1</span>
+          <div><h3 id="adminFlowTitle">Flujo de una conversación</h3><p>De principio a fin, esto es lo que ocurre.</p></div>
+        </div>
+        <ol class="admin-flow">
+          <li><span>1</span><div><strong>Llega un mensaje</strong><p>El cliente puede escribir, pero el bot permanece en silencio hasta que tú decidas atenderlo.</p></div></li>
+          <li><span>2</span><div><strong>Tú escribes <code>Welcome!</code></strong><p>Hazlo dentro del chat individual del cliente. No funciona en grupos.</p></div></li>
+          <li><span>3</span><div><strong>El bot hace las preguntas</strong><p>Idioma, número de personas, parking y fecha aproximada de entrada.</p></div></li>
+          <li><span>4</span><div><strong>Muestra la mejor opción</strong><p>Primero comparte ubicaciones; después envía la foto y el precio solamente de la propiedad elegida.</p></div></li>
+          <li><span>5</span><div><strong>La visita pasa a Koalendar</strong><p>Si el cliente quiere verla, recibe el enlace para elegir día y hora. La conversación termina ahí.</p></div></li>
+        </ol>
+      </section>
+
+      <section class="admin-help-section" aria-labelledby="adminCommandsTitle">
+        <div class="admin-help-section-title">
+          <span>2</span>
+          <div><h3 id="adminCommandsTitle">Comandos que debes conocer</h3><p>Escríbelos tal como aparecen.</p></div>
+        </div>
+        <div class="admin-command-grid">
+          <article><code>Welcome!</code><strong>Iniciar</strong><p>Lo escribes tú para comenzar o volver a abrir el formulario de ese chat.</p></article>
+          <article><code>Stop bot</code><strong>Detener</strong><p>Lo escribes tú para que el bot deje de responder inmediatamente en ese chat.</p></article>
+          <article><code>start again</code><code>iniciar de nuevo</code><strong>Empezar desde cero</strong><p>El cliente puede usar cualquiera. Se borra su expediente anterior y aparece nuevamente la pregunta de idioma.</p></article>
+        </div>
+      </section>
+
+      <section class="admin-help-section" aria-labelledby="adminModeTitle">
+        <div class="admin-help-section-title">
+          <span>3</span>
+          <div><h3 id="adminModeTitle">Desarrollo y producción</h3><p>El botón superior te indica el modo actual.</p></div>
+        </div>
+        <div class="admin-mode-grid">
+          <article><span class="admin-mode-dot development"></span><div><strong>Modo desarrollo</strong><p>Solo el chat de prueba <code>4378781645</code> puede recorrer el formulario.</p></div></article>
+          <article><span class="admin-mode-dot production"></span><div><strong>Modo producción</strong><p>Puedes iniciar el bot en cualquier chat individual escribiendo <code>Welcome!</code>. Nunca se inicia automáticamente.</p></div></article>
+        </div>
+      </section>
+
+      <section class="admin-help-section" aria-labelledby="adminTroubleshootTitle">
+        <div class="admin-help-section-title">
+          <span>4</span>
+          <div><h3 id="adminTroubleshootTitle">Si algo no funciona</h3><p>Revisa estas situaciones antes de hacer una prueba nueva.</p></div>
+        </div>
+        <div class="admin-troubleshoot-list">
+          <details>
+            <summary>Escribí <code>Welcome!</code> y no responde</summary>
+            <div><p>Confirma que el indicador superior diga que WhatsApp está listo, que sea un chat individual y que el mensaje sea exactamente <code>Welcome!</code>.</p><p>Si el indicador menciona un QR, abre el vínculo y escanéalo desde WhatsApp &gt; Dispositivos vinculados.</p><a href="http://127.0.0.1:3001/api/new-customers-info/whatsapp/qr" target="_blank" rel="noreferrer">Abrir QR de vinculación</a></div>
+          </details>
+          <details>
+            <summary>Necesito detener una conversación</summary>
+            <div><p>Escribe <code>Stop bot</code> dentro de ese chat. El cliente ya no podrá reactivarlo por su cuenta; tú puedes abrirlo después con <code>Welcome!</code>.</p></div>
+          </details>
+          <details>
+            <summary>Necesito pausar todo el bot</summary>
+            <div><p>Usa el botón <strong>Pausar bot</strong> de la esquina superior derecha. Mientras esté pausado, clientes nuevos no iniciará formularios, no procesará respuestas y no enviará mensajes automáticos. Presiona <strong>Continuar bot</strong> para reanudarlo.</p><p>Este control no pausa los recordatorios.</p></div>
+          </details>
+          <details>
+            <summary>El cliente quiere cambiar todas sus respuestas</summary>
+            <div><p>Pídele que escriba <code>start again</code> o <code>iniciar de nuevo</code>. El formulario anterior se elimina y comienza desde idioma.</p></div>
+          </details>
+          <details>
+            <summary>La casa, el precio o la foto no son correctos</summary>
+            <div><p>Abre <strong>Disponibilidad de casas</strong>. Ahí puedes agregar, editar, desactivar o eliminar cuartos; también puedes cambiar precio, parking y fotos. La primera foto será la principal.</p></div>
+          </details>
+          <details>
+            <summary>¿Dónde se administra la visita?</summary>
+            <div><p>El cliente elige día y hora en Koalendar. WhatsApp solo comparte el enlace; no agenda la visita dentro del chat.</p><a href="https://koalendar.com/e/meet-with-confort" target="_blank" rel="noreferrer">Abrir Koalendar</a></div>
+          </details>
+        </div>
+      </section>
+
+      <footer class="admin-help-footer">
+        <strong>Importante:</strong> el bot de recordatorios es independiente. Estos comandos y controles corresponden únicamente a clientes nuevos.
+      </footer>
+    </form>
+  </dialog>
+
   <dialog id="contactDetailDialog" class="modal customer-modal">
     <form method="dialog">
       <header class="modal-header">
@@ -302,7 +412,7 @@
       <section class="property-images-editor">
         <div>
           <h3>Fotos de la oferta</h3>
-          <p>Puedes conservar, quitar o adjuntar imágenes JPG, PNG, WEBP o GIF. Máximo 8 fotos y 12 MB por archivo.</p>
+          <p>Puedes conservar, quitar o adjuntar imágenes JPG, PNG, WEBP o GIF. La primera foto es la principal. Máximo 8 fotos y 12 MB por archivo.</p>
         </div>
         <div id="propertyImagesPreview" class="property-images-preview"></div>
         <label class="property-upload-field">

@@ -42,6 +42,44 @@ function propertyMediaItem(item) {
   };
 }
 
+function normalizedProperty(payload = {}, current = {}) {
+  const address = String(payload.address ?? current.address ?? '').trim();
+  const room = String(payload.room ?? current.room ?? '').trim();
+  const available = payload.available === undefined ? current.available !== false : payload.available === true;
+  const maxOccupants = Number(payload.maxOccupants ?? current.maxOccupants ?? 1);
+  const parkingSpaces = Number(payload.parkingSpaces ?? current.parkingSpaces ?? 0);
+  const prices = payload.prices && typeof payload.prices === 'object'
+    ? payload.prices
+    : (current.prices || {});
+  const priceOne = Number(prices[1] ?? prices['1']);
+  const priceTwoValue = prices[2] ?? prices['2'];
+  const priceTwo = priceTwoValue === undefined || priceTwoValue === null || priceTwoValue === ''
+    ? null
+    : Number(priceTwoValue);
+  const mediaItems = payload.mediaItems === undefined ? (current.mediaItems || []) : payload.mediaItems;
+
+  if (!address || address.length > 250) throw new Error('La direccion es obligatoria y debe tener menos de 250 caracteres.');
+  if (!room || room.length > 150) throw new Error('La habitacion es obligatoria y debe tener menos de 150 caracteres.');
+  if (![1, 2].includes(maxOccupants)) throw new Error('La capacidad debe ser de una o dos personas.');
+  if (!Number.isInteger(parkingSpaces) || parkingSpaces < 0 || parkingSpaces > 5) throw new Error('Los espacios de parking deben ser un numero entre 0 y 5.');
+  if (!Number.isInteger(priceOne) || priceOne <= 0 || priceOne > 100000) throw new Error('El precio para una persona debe ser un numero valido.');
+  if (maxOccupants === 2 && (!Number.isInteger(priceTwo) || priceTwo <= 0 || priceTwo > 100000)) {
+    throw new Error('Agrega un precio valido para dos personas.');
+  }
+  if (!Array.isArray(mediaItems) || mediaItems.length > 8) throw new Error('Puedes adjuntar hasta 8 imagenes por oferta.');
+
+  return {
+    address,
+    room,
+    available,
+    maxOccupants,
+    parkingSpaces,
+    priceOne,
+    priceTwo: maxOccupants === 2 ? priceTwo : null,
+    mediaItems: mediaItems.map(propertyMediaItem),
+  };
+}
+
 class NewCustomersStore {
   constructor(filename) {
     if (filename !== ':memory:') fs.mkdirSync(path.dirname(filename), { recursive: true });
@@ -123,7 +161,8 @@ class NewCustomersStore {
         price_two INTEGER,
         media_items_json TEXT NOT NULL DEFAULT '[]',
         sort_order INTEGER NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
       );
       CREATE TABLE IF NOT EXISTS appointment_settings (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -161,6 +200,8 @@ class NewCustomersStore {
     if (!outboxColumns.has('media_name')) this.db.exec("ALTER TABLE outgoing_messages ADD COLUMN media_name TEXT NOT NULL DEFAULT ''");
     const appointmentColumns = new Set(this.db.prepare('PRAGMA table_info(appointments)').all().map((column) => column.name));
     if (!appointmentColumns.has('visit_time')) this.db.exec("ALTER TABLE appointments ADD COLUMN visit_time TEXT NOT NULL DEFAULT ''");
+    const propertyColumns = new Set(this.db.prepare('PRAGMA table_info(properties)').all().map((column) => column.name));
+    if (!propertyColumns.has('deleted_at')) this.db.exec('ALTER TABLE properties ADD COLUMN deleted_at TEXT');
     this.db.exec("UPDATE appointments SET visit_time=time_start WHERE visit_time='' OR visit_time IS NULL");
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_appointments_exact_time ON appointments(visit_date, visit_time, status)');
     const seed = this.db.prepare(`INSERT OR IGNORE INTO properties
@@ -202,6 +243,13 @@ class NewCustomersStore {
 
   isProcessed(messageId) {
     return Boolean(messageId && this.db.prepare('SELECT 1 FROM processed_messages WHERE message_id = ?').get(messageId));
+  }
+
+  markProcessed(messageId) {
+    const value = String(messageId || '').trim();
+    if (!value) return false;
+    return this.db.prepare('INSERT OR IGNORE INTO processed_messages (message_id, processed_at) VALUES (?, ?)')
+      .run(value, nowIso()).changes > 0;
   }
 
   contactFromRow(row) {
@@ -254,46 +302,48 @@ class NewCustomersStore {
   }
 
   listProperties() {
-    return this.db.prepare('SELECT * FROM properties ORDER BY sort_order, id').all()
+    return this.db.prepare('SELECT * FROM properties WHERE deleted_at IS NULL ORDER BY sort_order, id').all()
       .map((row) => this.propertyFromRow(row));
   }
 
   getProperty(id) {
-    return this.propertyFromRow(this.db.prepare('SELECT * FROM properties WHERE id = ?').get(id));
+    return this.propertyFromRow(this.db.prepare('SELECT * FROM properties WHERE id = ? AND deleted_at IS NULL').get(id));
+  }
+
+  createProperty(payload = {}) {
+    const property = normalizedProperty(payload);
+    const id = crypto.randomUUID();
+    const sortOrder = Number(this.db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS value FROM properties').get().value);
+    const timestamp = nowIso();
+    this.db.prepare(`INSERT INTO properties
+      (id, address, room, available, max_occupants, parking_spaces, price_one, price_two,
+       media_items_json, sort_order, updated_at, deleted_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`)
+      .run(id, property.address, property.room, property.available ? 1 : 0, property.maxOccupants,
+        property.parkingSpaces, property.priceOne, property.priceTwo, JSON.stringify(property.mediaItems),
+        sortOrder, timestamp);
+    return this.getProperty(id);
   }
 
   updateProperty(id, payload = {}) {
     const current = this.getProperty(id);
     if (!current) return null;
-    const address = String(payload.address ?? current.address).trim();
-    const room = String(payload.room ?? current.room).trim();
-    const available = payload.available === undefined ? current.available : payload.available === true;
-    const maxOccupants = Number(payload.maxOccupants ?? current.maxOccupants);
-    const parkingSpaces = Number(payload.parkingSpaces ?? current.parkingSpaces);
-    const prices = payload.prices && typeof payload.prices === 'object' ? payload.prices : current.prices;
-    const priceOne = Number(prices[1] ?? prices['1']);
-    const priceTwoValue = prices[2] ?? prices['2'];
-    const priceTwo = priceTwoValue === undefined || priceTwoValue === null || priceTwoValue === ''
-      ? null
-      : Number(priceTwoValue);
-    const mediaItems = payload.mediaItems === undefined ? current.mediaItems : payload.mediaItems;
-
-    if (!address || address.length > 250) throw new Error('La direccion es obligatoria y debe tener menos de 250 caracteres.');
-    if (!room || room.length > 150) throw new Error('La habitacion es obligatoria y debe tener menos de 150 caracteres.');
-    if (![1, 2].includes(maxOccupants)) throw new Error('La capacidad debe ser de una o dos personas.');
-    if (!Number.isInteger(parkingSpaces) || parkingSpaces < 0 || parkingSpaces > 5) throw new Error('Los espacios de parking deben ser un numero entre 0 y 5.');
-    if (!Number.isInteger(priceOne) || priceOne <= 0 || priceOne > 100000) throw new Error('El precio para una persona debe ser un numero valido.');
-    if (maxOccupants === 2 && (!Number.isInteger(priceTwo) || priceTwo <= 0 || priceTwo > 100000)) {
-      throw new Error('Agrega un precio valido para dos personas.');
-    }
-    if (!Array.isArray(mediaItems) || mediaItems.length > 8) throw new Error('Puedes adjuntar hasta 8 imagenes por oferta.');
-    const normalizedMedia = mediaItems.map(propertyMediaItem);
+    const property = normalizedProperty(payload, current);
     const timestamp = nowIso();
     this.db.prepare(`UPDATE properties SET address=?, room=?, available=?, max_occupants=?, parking_spaces=?,
       price_one=?, price_two=?, media_items_json=?, updated_at=? WHERE id=?`)
-      .run(address, room, available ? 1 : 0, maxOccupants, parkingSpaces, priceOne,
-        maxOccupants === 2 ? priceTwo : null, JSON.stringify(normalizedMedia), timestamp, id);
+      .run(property.address, property.room, property.available ? 1 : 0, property.maxOccupants,
+        property.parkingSpaces, property.priceOne, property.priceTwo, JSON.stringify(property.mediaItems), timestamp, id);
     return this.getProperty(id);
+  }
+
+  deleteProperty(id) {
+    const current = this.getProperty(id);
+    if (!current) return null;
+    const timestamp = nowIso();
+    this.db.prepare('UPDATE properties SET available=0, deleted_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL')
+      .run(timestamp, timestamp, id);
+    return { ...current, available: false, deletedAt: timestamp };
   }
 
   appointmentFromRow(row) {
@@ -439,11 +489,15 @@ class NewCustomersStore {
       const existing = this.db.prepare('SELECT id FROM contacts WHERE chat_id = ?').get(chatId);
       const id = existing?.id || crypto.randomUUID();
       if (existing) {
+        const activationMatchIds = Array.isArray(transition.matches)
+          ? transition.matches.map((item) => item.id)
+          : (transition.matchIds || []);
         this.db.prepare("UPDATE outgoing_messages SET status='CANCELLED' WHERE contact_id=? AND status IN ('PENDING','ERROR')").run(id);
-        this.db.prepare(`UPDATE contacts SET phone_e164=?, display_name=?, lead_status=?, conversation_status=?, current_field_id=?, language=NULL,
-          match_ids_json='[]', last_message=?, updated_at=?, last_message_at=? WHERE id=?`)
-          .run(phoneE164, displayName, transition.leadStatus, transition.conversationStatus, transition.currentFieldId, 'Bot iniciado por administrador', timestamp, timestamp, id);
-        this.db.prepare('DELETE FROM answers WHERE contact_id = ?').run(id);
+        this.db.prepare(`UPDATE contacts SET phone_e164=?, display_name=?, lead_status=?, conversation_status=?, current_field_id=?, language=?,
+          match_ids_json=?, last_message=?, updated_at=?, last_message_at=? WHERE id=?`)
+          .run(phoneE164, displayName, transition.leadStatus, transition.conversationStatus, transition.currentFieldId,
+            transition.language || null, JSON.stringify(activationMatchIds), 'Bot iniciado por administrador', timestamp, timestamp, id);
+        if (!transition.preserveConversationData) this.db.prepare('DELETE FROM answers WHERE contact_id = ?').run(id);
       } else {
         this.db.prepare(`INSERT INTO contacts
           (id, chat_id, phone_e164, display_name, lead_status, conversation_status, current_field_id, last_message, created_at, updated_at, last_message_at)
@@ -451,7 +505,7 @@ class NewCustomersStore {
           .run(id, chatId, phoneE164, displayName, transition.leadStatus, transition.conversationStatus, transition.currentFieldId, 'Bot iniciado por administrador', timestamp, timestamp, timestamp);
       }
       this.enqueue(id, chatId, transition.outgoing, timestamp);
-      this.db.prepare('INSERT INTO audit_events (contact_id, event_type, message_text, created_at) VALUES (?, ?, ?, ?)').run(id, transition.auditType, 'start bot', timestamp);
+      this.db.prepare('INSERT INTO audit_events (contact_id, event_type, message_text, created_at) VALUES (?, ?, ?, ?)').run(id, transition.auditType, 'Welcome!', timestamp);
       if (messageId) this.db.prepare('INSERT INTO processed_messages (message_id, processed_at) VALUES (?, ?)').run(messageId, timestamp);
       return { duplicate: false, contact: this.getContact(id) };
     });
@@ -552,6 +606,11 @@ class NewCustomersStore {
 
   pendingOutbox(limit = 20) {
     return this.db.prepare("SELECT id, contact_id AS contactId, chat_id AS chatId, body, media_path AS mediaPath, media_name AS mediaName, attempts FROM outgoing_messages WHERE status IN ('PENDING','ERROR') AND attempts < 5 ORDER BY id LIMIT ?").all(limit);
+  }
+
+  cancelQueuedOutbox(reason = 'SERVICE_RESTARTED') {
+    return this.db.prepare("UPDATE outgoing_messages SET status='CANCELLED', last_error=? WHERE status IN ('PENDING','ERROR')")
+      .run(String(reason || 'SERVICE_RESTARTED').slice(0, 1000)).changes;
   }
 
   isOutboxSendable(id) {

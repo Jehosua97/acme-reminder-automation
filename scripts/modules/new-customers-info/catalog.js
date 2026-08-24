@@ -77,6 +77,16 @@ const DEFAULT_PROPERTIES = [
     prices: { 1: 850 },
     mediaItems: [],
   },
+  {
+    id: '26-lincoln',
+    available: true,
+    address: '26 Lincoln Ct, Brampton, ON L6T 3Z2',
+    room: 'Habitación disponible',
+    maxOccupants: 1,
+    parkingSpaces: 1,
+    prices: { 1: 1000 },
+    mediaItems: [],
+  },
 ];
 
 function matchProperties(answers, properties = DEFAULT_PROPERTIES) {

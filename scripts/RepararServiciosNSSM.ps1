@@ -45,6 +45,9 @@ foreach ($service in $Services) {
     & $Nssm set $service AppExit Default Restart | Out-Null
     & $Nssm set $service AppThrottle 1500 | Out-Null
     & $Nssm set $service AppRestartDelay 10000 | Out-Null
+    & $Nssm set $service AppNoConsole 1 | Out-Null
+    & sc.exe failure $service 'reset=' 86400 'actions=' 'restart/5000/restart/10000/restart/30000' | Out-Null
+    & sc.exe failureflag $service 1 | Out-Null
 }
 
 $lock = Join-Path $Runtime 'servicio_programados.lock'

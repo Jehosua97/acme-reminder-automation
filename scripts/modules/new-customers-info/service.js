@@ -3,8 +3,16 @@
 const fs = require('fs');
 const path = require('path');
 const { MessageMedia } = require('whatsapp-web.js');
+const settingsStore = require('../../data_store');
 const { NewCustomersStore } = require('./store');
-const { START_COMMAND_ALIASES, STOP_COMMAND, activate, handleText, normalize } = require('./engine');
+const {
+  START_COMMAND_ALIASES,
+  STOP_COMMAND,
+  RESTART_COMMANDS,
+  activate,
+  handleText,
+  normalize,
+} = require('./engine');
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 
@@ -46,16 +54,15 @@ function createNewCustomersService(options = {}) {
     process.env.NEW_CUSTOMERS_DB_FILE || 'data/new-customers-whatsapp.sqlite'
   );
   const store = options.store || new NewCustomersStore(filename);
-  let configuredTestMode = false;
-  if (process.env.NEW_CUSTOMERS_TEST_MODE !== undefined) {
-    configuredTestMode = String(process.env.NEW_CUSTOMERS_TEST_MODE).toLowerCase() !== 'false';
-  } else {
-    try {
-      const settings = JSON.parse(fs.readFileSync(path.resolve(PROJECT_ROOT, 'data/settings.json'), 'utf8'));
-      configuredTestMode = settings.newCustomersTestMode === true;
-    } catch {}
-  }
-  const testMode = options.testMode ?? configuredTestMode;
+  const readSettings = options.readSettings || settingsStore.readSettings;
+  const writeSettings = options.writeSettings || settingsStore.writeSettings;
+  let configuredSettings = {};
+  try { configuredSettings = readSettings(); } catch {}
+  const configuredTestMode = process.env.NEW_CUSTOMERS_TEST_MODE !== undefined
+    ? String(process.env.NEW_CUSTOMERS_TEST_MODE).toLowerCase() !== 'false'
+    : configuredSettings.newCustomersTestMode === true;
+  let testMode = options.testMode ?? configuredTestMode;
+  let paused = options.paused ?? configuredSettings.newCustomersPaused === true;
   const allowedInput = Array.isArray(options.allowedNumbers)
     ? options.allowedNumbers
     : String(options.allowedNumbers || process.env.NEW_CUSTOMERS_TEST_NUMBERS || '4378781645').split(',');
@@ -70,15 +77,39 @@ function createNewCustomersService(options = {}) {
   const allowMissingMessageTimestamp = options.allowMissingMessageTimestamp === true;
   let flushQueue = Promise.resolve();
   const isStartCommand = (value) => START_COMMAND_ALIASES.includes(normalize(value));
+  const isRestartCommand = (value) => RESTART_COMMANDS.includes(normalize(value));
 
   function policyInfo() {
     return {
       testMode,
+      paused,
       allowedNumbers: testMode ? [...allowedNumbers] : [],
       adminNumbers: [...adminNumbers],
-      automaticTrigger: testMode ? 'TEST_ALLOWLIST' : 'UNSAVED_DIRECT_CONTACTS',
+      automaticTrigger: 'ADMIN_OUTBOUND_WELCOME_COMMAND',
       directChatsOnly: true,
+      restartCommands: [...RESTART_COMMANDS],
     };
+  }
+
+  function setTestMode(value, { persist = true } = {}) {
+    if (typeof value !== 'boolean') throw new Error('testMode debe ser true o false.');
+    testMode = value;
+    if (persist) {
+      const settings = readSettings();
+      writeSettings({ ...settings, newCustomersTestMode: testMode });
+    }
+    return policyInfo();
+  }
+
+  function setPaused(value, { persist = true } = {}) {
+    if (typeof value !== 'boolean') throw new Error('paused debe ser true o false.');
+    paused = value;
+    if (paused) store.cancelQueuedOutbox('CANCELLED_BY_GLOBAL_PAUSE');
+    if (persist) {
+      const settings = readSettings();
+      writeSettings({ ...settings, newCustomersPaused: paused });
+    }
+    return policyInfo();
   }
 
   function isAllowedForTesting(chatId, whatsappContact = null) {
@@ -108,9 +139,7 @@ function createNewCustomersService(options = {}) {
   }
 
   function shouldAutoActivate(chatId, whatsappContact = null) {
-    if (!isDirectChat(chatId) || !isAllowedForTesting(chatId, whatsappContact)) return false;
-    if (testMode) return true;
-    return whatsappContact?.isMyContact === false;
+    return false;
   }
 
   async function resolveWhatsappContact(client, chat, chatId) {
@@ -138,12 +167,29 @@ function createNewCustomersService(options = {}) {
   }
 
   function activateChat({ chatId, phoneE164 = '', displayName = '', messageId = '' }) {
+    const existing = store.getContactByChat(chatId);
+    let transition = activate();
+    if (existing?.appointment) {
+      const resumed = handleText(
+        { ...existing, currentFieldId: null },
+        '',
+        store.listProperties(),
+        store.getAppointmentAvailability(existing.id)
+      );
+      transition = {
+        ...resumed,
+        conversationStatus: 'ACTIVE',
+        leadStatus: 'CITA_AGENDADA',
+        auditType: 'BOT_STARTED',
+        preserveConversationData: true,
+      };
+    }
     return store.activate({
       chatId,
       phoneE164: phoneE164 || phoneFromChat(chatId),
       displayName,
       messageId,
-      transition: activate(),
+      transition,
     });
   }
 
@@ -162,34 +208,34 @@ function createNewCustomersService(options = {}) {
     return result;
   }
 
+  function restartChat({ chatId, messageId = '' }) {
+    const existing = store.getContactByChat(chatId);
+    if (!existing) return { ignored: true, reason: 'CONTACT_NOT_ACTIVATED' };
+    if (existing.conversationStatus === 'STOPPED_BY_ADMIN') {
+      return { ignored: true, reason: 'STOPPED_BY_ADMIN', contact: existing };
+    }
+    if (existing.conversationStatus === 'HANDOFF_REQUESTED') {
+      return { ignored: true, reason: 'HANDOFF_REQUESTED', contact: existing };
+    }
+    const identity = { phoneE164: existing.phoneE164, displayName: existing.displayName };
+    store.deleteContact(existing.id);
+    return activateChat({ chatId, ...identity, messageId });
+  }
+
   function handleIncoming({ chatId, text, messageId = '' }) {
+    if (paused) {
+      store.markProcessed(messageId);
+      return { ignored: true, reason: 'GLOBAL_PAUSED' };
+    }
     const contact = store.getContactByChat(chatId);
     if (!contact) return { ignored: true, reason: 'CONTACT_NOT_ACTIVATED' };
-    if (isStartCommand(text) && isAdminIdentity(chatId, contact)) {
-      return activateChat({
-        chatId: contact.chatId,
-        phoneE164: contact.phoneE164,
-        displayName: contact.displayName,
-        messageId,
-      });
-    }
     if (normalize(text) === STOP_COMMAND && isAdminIdentity(chatId, contact)) {
       return stopChat({ chatId, phoneE164: contact.phoneE164, messageId });
     }
     if (contact.conversationStatus === 'STOPPED_BY_ADMIN') return { ignored: true, reason: 'STOPPED_BY_ADMIN', contact };
     if (contact.conversationStatus === 'HANDOFF_REQUESTED') return { ignored: true, reason: 'HANDOFF_REQUESTED', contact };
-    const cancelledAppointment = contact.leadStatus === 'CITA_CANCELADA'
-      || (contact.leadStatus === 'SEGUIMIENTO'
-        && store.history(contact.id).some((event) => event.eventType === 'APPOINTMENT_CANCELLED'));
-    if (contact.conversationStatus === 'COMPLETE' && !contact.appointment
-        && (contact.leadStatus === 'NO_INTERESADO' || cancelledAppointment)) {
-      return activateChat({
-        chatId: contact.chatId,
-        phoneE164: contact.phoneE164,
-        displayName: contact.displayName,
-        messageId,
-      });
-    }
+    if (isRestartCommand(text)) return restartChat({ chatId, messageId });
+    if (contact.conversationStatus === 'COMPLETE') return { ignored: true, reason: 'COMPLETE_AWAITING_ADMIN', contact };
     return store.applyIncoming({
       contact,
       messageId,
@@ -199,10 +245,14 @@ function createNewCustomersService(options = {}) {
   }
 
   function flushOutbox(client) {
+    if (paused) return Promise.resolve({ ignored: true, reason: 'GLOBAL_PAUSED' });
     const run = flushQueue.then(async () => {
       for (const outgoing of store.pendingOutbox()) {
         try {
+          if (paused) break;
           if (!store.isOutboxSendable(outgoing.id)) continue;
+          const contact = store.getContact(outgoing.contactId);
+          if (!isAllowedForTesting(outgoing.chatId, contact)) continue;
           if (outgoing.mediaPath) {
             const mediaFile = path.isAbsolute(outgoing.mediaPath)
               ? outgoing.mediaPath
@@ -226,6 +276,10 @@ function createNewCustomersService(options = {}) {
   function attach(client) {
     const chatLocks = new Map();
     let readyAtUnix = 0;
+    const cancelledAtStartup = store.cancelQueuedOutbox('CANCELLED_ON_SERVICE_RESTART');
+    if (cancelledAtStartup) {
+      console.log(`New Customers Info: ${cancelledAtStartup} mensaje(s) pendiente(s) anterior(es) cancelado(s) al reiniciar.`);
+    }
     const isLiveEvent = (message) => {
       const timestamp = Number(message?.timestamp || 0);
       if (!timestamp) return allowMissingMessageTimestamp;
@@ -243,6 +297,15 @@ function createNewCustomersService(options = {}) {
     async function processIncomingMessage(message, recovered = false) {
       const chatId = message?.from || '';
       if (message?.fromMe || !isDirectChat(chatId)) return;
+      if (paused) {
+        store.markProcessed(messageIdOf(message));
+        console.log(`New Customers Info: mensaje ignorado mientras el bot global esta pausado para ${maskedIdentity(chatId)}.`);
+        return;
+      }
+      if (!String(message?.body || '').trim()) {
+        console.log(`New Customers Info: evento sin texto ignorado para ${maskedIdentity(chatId)}.`);
+        return;
+      }
       if (!recovered && !isLiveEvent(message)) {
         console.log(`New Customers Info: mensaje histórico ignorado para ${maskedIdentity(chatId)}.`);
         return;
@@ -263,19 +326,11 @@ function createNewCustomersService(options = {}) {
 
       const existing = store.getContactByChat(chatId);
       const incomingCommand = normalize(message?.body);
-      const adminCommand = (isStartCommand(incomingCommand) || incomingCommand === STOP_COMMAND)
-        && isAdminIdentity(chatId, whatsappContact);
-      if (isStartCommand(incomingCommand) && adminCommand) {
-        activateChat({
-          chatId,
-          phoneE164: e164FromContact(chatId, whatsappContact),
-          displayName: whatsappContact?.name || whatsappContact?.pushname || chat?.name || existing?.displayName || '',
-          messageId: messageIdOf(message),
-        });
-        console.log(`New Customers Info: bot iniciado por administrador ${maskedIdentity(chatId)}.`);
-        await flushOutbox(client);
+      if (isStartCommand(incomingCommand)) {
+        console.log(`New Customers Info: Welcome! entrante ignorado para ${maskedIdentity(chatId)}; sÃ³lo el mensaje enviado por el admin puede iniciar.`);
         return;
       }
+      const adminCommand = incomingCommand === STOP_COMMAND && isAdminIdentity(chatId, whatsappContact);
       if (incomingCommand === STOP_COMMAND && adminCommand) {
         if (existing) {
           stopChat({ chatId, phoneE164: e164FromContact(chatId, whatsappContact), messageId: messageIdOf(message) });
@@ -283,7 +338,7 @@ function createNewCustomersService(options = {}) {
         }
         return;
       }
-      if ((isStartCommand(incomingCommand) || incomingCommand === STOP_COMMAND) && !adminCommand) {
+      if (incomingCommand === STOP_COMMAND && !adminCommand) {
         console.log(`New Customers Info: texto reservado recibido de cliente ${maskedIdentity(chatId)}; se procesa como mensaje normal.`);
       }
       if (!existing) {
@@ -307,6 +362,7 @@ function createNewCustomersService(options = {}) {
     }
 
     async function recoverAllowedMessages() {
+      if (paused) return;
       if (!testMode || typeof client.getChats !== 'function') return;
       if (typeof client.getNumberId === 'function') {
         for (const allowed of allowedNumbers) {
@@ -353,6 +409,10 @@ function createNewCustomersService(options = {}) {
       const chatId = typeof rawChatId === 'string' ? rawChatId : (rawChatId?._serialized || '');
       const command = normalize(message?.body);
       if (!message?.fromMe || !isDirectChat(chatId) || (!isStartCommand(command) && command !== STOP_COMMAND)) return;
+      if (paused) {
+        console.log(`New Customers Info: comando del admin ignorado mientras el bot global esta pausado para ${maskedIdentity(chatId)}.`);
+        return;
+      }
       if (!isLiveEvent(message)) {
         console.log(`New Customers Info: comando histórico ignorado para ${maskedIdentity(chatId)}.`);
         return;
@@ -402,10 +462,13 @@ function createNewCustomersService(options = {}) {
   return {
     store,
     policyInfo,
+    setTestMode,
+    setPaused,
     isAllowedForTesting,
     isAdminIdentity,
     shouldAutoActivate,
     activateChat,
+    restartChat,
     stopChat,
     handleIncoming,
     flushOutbox,

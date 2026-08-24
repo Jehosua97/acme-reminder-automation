@@ -7,6 +7,36 @@ const fs = require('fs');
 const { createApp } = require('./web_server');
 const { NewCustomersStore } = require('./modules/new-customers-info/store');
 const { createNewCustomersService, isDirectChat } = require('./modules/new-customers-info/service');
+const {
+  isNavigationContextError,
+  makeInjectionNavigationResilient,
+} = require('./navigation_resilient_client');
+
+async function testNavigationResilience() {
+  assert.equal(isNavigationContextError(new Error('Execution context was destroyed.')), true);
+  assert.equal(isNavigationContextError(new Error('Un error permanente')), false);
+
+  let injectCalls = 0;
+  let waitCalls = 0;
+  const client = {
+    pupPage: {
+      isClosed: () => false,
+      waitForFunction: async () => { waitCalls += 1; },
+    },
+    inject: async () => {
+      injectCalls += 1;
+      if (injectCalls === 1) throw new Error('Execution context was destroyed.');
+      return 'ready';
+    },
+  };
+  makeInjectionNavigationResilient(client, { retryDelayMs: 0, maxAttempts: 3 });
+  const first = client.inject();
+  const coalesced = client.inject();
+  assert.equal(first, coalesced, 'Las inyecciones simultaneas deben compartir la misma recuperacion');
+  assert.equal(await first, 'ready');
+  assert.equal(injectCalls, 2);
+  assert.equal(waitCalls, 2);
+}
 
 async function testConversation(service) {
   const chatId = '14378781645@c.us';
@@ -60,75 +90,47 @@ async function testConversation(service) {
     .filter((entry) => typeof entry[1] === 'string')
     .map((entry) => entry[1]);
   assert.equal(selectedMessages.length, 1, 'Con foto solo debe enviarse adicionalmente la pregunta para agendar');
-  assert.match(selectedMessages[0], /agendar una visita/i);
+  assert.match(selectedMessages[0], /ver esta propiedad en persona/i);
   assert.doesNotMatch(selectedMessages[0], /14 Hayden|\$850|Precio:/,
     'La información de la propiedad no debe repetirse fuera de la foto');
   const digest = crypto.createHash('sha256').update(fs.readFileSync(roomPhotos[0].filename)).digest('hex').toUpperCase();
   assert.equal(digest, 'DD01F3328162CAE03BBF37E8FCE7B48AA4F6092C997746E55C6689D70C2153A6');
 
   service.handleIncoming({ chatId, text: 'Sí', messageId: 'client-6' });
-  assert.equal(service.store.getContactByChat(chatId).currentFieldId, 'appointment_date');
-  service.handleIncoming({ chatId, text: '1', messageId: 'client-7' });
-  assert.equal(service.store.getContactByChat(chatId).currentFieldId, 'appointment_time');
-  service.handleIncoming({ chatId, text: '6 pm', messageId: 'client-8' });
-  let scheduledContact = service.store.getContactByChat(chatId);
-  assert.equal(scheduledContact.leadStatus, 'CITA_AGENDADA');
-  assert.equal(scheduledContact.conversationStatus, 'COMPLETE');
-  assert.equal(scheduledContact.appointment.propertyId, '14-hayden');
-  assert.equal(scheduledContact.appointment.visitDate, '2026-08-18');
-  assert.equal(scheduledContact.appointment.visitTime, '18:00');
-  assert.equal(scheduledContact.appointment.timeWindowId, 'weekday-evening');
-
-  service.handleIncoming({ chatId, text: 'Hola otra vez', messageId: 'client-9' });
-  assert.equal(service.store.getContactByChat(chatId).appointment.id, scheduledContact.appointment.id);
-  service.handleIncoming({ chatId, text: 'Modificar', messageId: 'client-10' });
-  assert.equal(service.store.getContactByChat(chatId).currentFieldId, 'appointment_property');
-  service.handleIncoming({ chatId, text: '1', messageId: 'client-11' });
-  service.handleIncoming({ chatId, text: '2', messageId: 'client-12' });
-  service.handleIncoming({ chatId, text: '1', messageId: 'client-13' });
-  scheduledContact = service.store.getContactByChat(chatId);
-  assert.equal(scheduledContact.appointment.propertyId, '11-huntingwood');
-  assert.equal(scheduledContact.appointment.visitDate, '2026-08-19');
-  assert.equal(scheduledContact.appointment.visitTime, '18:00');
-  assert.equal(scheduledContact.appointment.timeWindowId, 'weekday-evening');
-  assert.equal(service.store.listAppointments({ status: 'SUPERSEDED' }).length, 1);
-
-  service.handleIncoming({ chatId, text: 'Cancelar', messageId: 'client-14' });
-  assert.equal(service.store.getContactByChat(chatId).currentFieldId, 'appointment_cancel_confirmation');
-  service.handleIncoming({ chatId, text: 'No', messageId: 'client-15' });
-  assert.ok(service.store.getContactByChat(chatId).appointment, 'Responder No debe conservar la cita');
-
-  service.store.enqueue(contact.id, chatId, [{
-    body: 'Foto de prueba', mediaPath: __filename, mediaName: 'test.jpg',
-  }], new Date().toISOString());
+  let completedContact = service.store.getContactByChat(chatId);
+  assert.equal(completedContact.currentFieldId, null);
+  assert.equal(completedContact.conversationStatus, 'COMPLETE');
+  assert.equal(completedContact.leadStatus, 'INTERESADO');
+  assert.equal(completedContact.appointment, null, 'Koalendar reemplaza por completo la agenda interna');
   await service.flushOutbox(client);
-  assert.equal(sent.at(-1)[0], chatId);
-  assert.deepEqual(sent.at(-1)[1], { filename: __filename });
-  assert.equal(sent.at(-1)[2].caption, 'Foto de prueba');
+  assert.match(sent.at(-1)[1], /https:\/\/koalendar\.com\/e\/meet-with-confort/);
+  assert.match(sent.at(-1)[1], /iniciar de nuevo/i);
+  assert.doesNotMatch(sent.at(-1)[1], /Seleccione una fecha|hora disponible/i);
+  assert.equal(service.handleIncoming({ chatId, text: 'Hola otra vez', messageId: 'client-7' }).reason, 'COMPLETE_AWAITING_ADMIN');
 
-  service.handleIncoming({ chatId, text: 'Stop bot', messageId: 'client-stop-1' });
-  assert.equal(service.store.getContactByChat(chatId).conversationStatus, 'STOPPED_BY_ADMIN');
-  assert.equal(service.store.getContactByChat(chatId).leadStatus, 'BOT_DETENIDO');
-  assert.equal(service.handleIncoming({ chatId, text: 'Sí', messageId: 'client-stopped' }).reason, 'STOPPED_BY_ADMIN');
-  service.handleIncoming({ chatId, text: 'inciair bot', messageId: 'admin-restart-1' });
-  assert.equal(service.store.getContactByChat(chatId).currentFieldId, 'language');
-  return contact.id;
+  const firstId = completedContact.id;
+  service.handleIncoming({ chatId, text: 'start again', messageId: 'client-restart-en' });
+  let restarted = service.store.getContactByChat(chatId);
+  assert.notEqual(restarted.id, firstId, 'start again debe crear un expediente limpio');
+  assert.equal(service.store.getContact(firstId), null);
+  assert.equal(restarted.currentFieldId, 'language');
+  assert.equal(restarted.leadStatus, 'NUEVO');
+  assert.deepEqual(restarted.answers, {});
+  assert.deepEqual(restarted.matchIds, []);
+  assert.equal(service.store.listAppointments({ status: 'ALL' }).length, 0);
+  assert.equal(service.store.history(restarted.id).length, 1, 'El expediente reiniciado no debe conservar historial anterior');
+
+  service.handleIncoming({ chatId, text: 'Español', messageId: 'client-restart-language' });
+  const secondId = restarted.id;
+  service.handleIncoming({ chatId, text: 'iniciar de nuevo', messageId: 'client-restart-es' });
+  restarted = service.store.getContactByChat(chatId);
+  assert.notEqual(restarted.id, secondId, 'iniciar de nuevo también debe borrar el expediente anterior');
+  assert.equal(restarted.currentFieldId, 'language');
+  assert.deepEqual(restarted.answers, {});
+  return restarted.id;
 }
 
-function qualifyAndBook(service, chatId, prefix) {
-  service.activateChat({ chatId, displayName: 'Cliente cita', messageId: `${prefix}-start` });
-  service.handleIncoming({ chatId, text: 'Español', messageId: `${prefix}-1` });
-  service.handleIncoming({ chatId, text: '1 persona', messageId: `${prefix}-2` });
-  service.handleIncoming({ chatId, text: 'sí', messageId: `${prefix}-3` });
-  service.handleIncoming({ chatId, text: '1 de septiembre', messageId: `${prefix}-4` });
-  service.handleIncoming({ chatId, text: 'opción 1', messageId: `${prefix}-location` });
-  service.handleIncoming({ chatId, text: 'sí', messageId: `${prefix}-schedule` });
-  service.handleIncoming({ chatId, text: '1', messageId: `${prefix}-date` });
-  service.handleIncoming({ chatId, text: '1', messageId: `${prefix}-time` });
-  return service.store.getContactByChat(chatId);
-}
-
-function testHumanHandoffAndCancellation() {
+function testHumanHandoffAndRestart() {
   const store = new NewCustomersStore(':memory:');
   const service = createNewCustomersService({ store });
   const nonAdminChat = '14165557770@c.us';
@@ -144,33 +146,27 @@ function testHumanHandoffAndCancellation() {
   assert.equal(handoff.conversationStatus, 'HANDOFF_REQUESTED');
   assert.equal(handoff.leadStatus, 'ATENCION_HUMANA');
   assert.equal(service.handleIncoming({ chatId: handoffChat, text: 'Hola', messageId: 'handoff-2' }).reason, 'HANDOFF_REQUESTED');
+  assert.equal(service.handleIncoming({ chatId: handoffChat, text: 'start again', messageId: 'handoff-restart-client' }).reason,
+    'HANDOFF_REQUESTED');
   service.activateChat({ chatId: handoffChat, messageId: 'handoff-restart' });
   assert.equal(store.getContactByChat(handoffChat).currentFieldId, 'language');
 
-  const cancelChat = '14165557772@c.us';
-  assert.ok(qualifyAndBook(service, cancelChat, 'cancel').appointment);
-  service.handleIncoming({ chatId: cancelChat, text: 'Cancelar', messageId: 'cancel-8' });
-  service.handleIncoming({ chatId: cancelChat, text: 'Sí', messageId: 'cancel-9' });
-  const cancelled = store.getContactByChat(cancelChat);
-  assert.equal(cancelled.appointment, null);
-  assert.equal(cancelled.leadStatus, 'CITA_CANCELADA');
-  assert.equal(cancelled.conversationStatus, 'COMPLETE');
-  assert.equal(cancelled.language, null);
-  assert.deepEqual(cancelled.answers, {}, 'Cancelar debe borrar todas las respuestas del flujo anterior');
-  assert.deepEqual(cancelled.matchIds, [], 'Cancelar debe borrar las opciones del flujo anterior');
-  assert.equal(store.listAppointments({ status: 'CANCELLED' }).length, 1);
-  const cancellationMessage = store.pendingOutbox(100).filter((message) => message.contactId === cancelled.id).at(-1);
-  assert.match(cancellationMessage.body, /visita fue cancelada/i);
-  service.handleIncoming({ chatId: cancelChat, text: 'Hola de nuevo', messageId: 'cancel-10' });
-  const restartedAfterCancellation = store.getContactByChat(cancelChat);
-  assert.equal(restartedAfterCancellation.currentFieldId, 'language');
-  assert.equal(restartedAfterCancellation.leadStatus, 'NUEVO');
-  assert.equal(restartedAfterCancellation.appointment, null);
-  assert.deepEqual(restartedAfterCancellation.answers, {});
-  assert.deepEqual(restartedAfterCancellation.matchIds, []);
-  const restartedMessage = store.pendingOutbox(100).filter((message) => message.contactId === cancelled.id).at(-1);
-  assert.match(restartedMessage.body, /English or Spanish/i,
-    'El primer mensaje después de cancelar debe mostrar el menú inicial');
+  const resetChat = '14165557772@c.us';
+  service.activateChat({ chatId: resetChat, messageId: 'reset-start' });
+  service.handleIncoming({ chatId: resetChat, text: 'Español', messageId: 'reset-language' });
+  const resetBefore = store.getContactByChat(resetChat);
+  const availability = store.getAppointmentAvailability(resetBefore.id);
+  const firstDate = availability.dates.find((entry) => entry.times.length);
+  store.bookAppointment(resetBefore.id, {
+    propertyId: '14-hayden', visitDate: firstDate.date, visitTime: firstDate.times[0].time,
+  });
+  service.handleIncoming({ chatId: resetChat, text: 'iniciar de nuevo', messageId: 'reset-command' });
+  const resetAfter = store.getContactByChat(resetChat);
+  assert.notEqual(resetAfter.id, resetBefore.id);
+  assert.equal(store.getContact(resetBefore.id), null);
+  assert.equal(store.listAppointments({ status: 'ALL' }).length, 0);
+  assert.deepEqual(resetAfter.answers, {});
+  assert.equal(store.history(resetAfter.id).length, 1);
 
   const reopenChat = '14165557773@c.us';
   service.activateChat({ chatId: reopenChat, messageId: 'reopen-start' });
@@ -186,6 +182,8 @@ function testHumanHandoffAndCancellation() {
   const farewell = store.pendingOutbox(100).filter((message) => message.contactId === closedContact.id).at(-1);
   assert.match(farewell.body, /Thank you for contacting Confort Place/i);
   service.handleIncoming({ chatId: reopenChat, text: 'hi', messageId: 'reopen-7' });
+  assert.equal(store.getContactByChat(reopenChat).conversationStatus, 'COMPLETE', 'Un mensaje nuevo no debe reiniciar una conversaciÃ³n terminada');
+  service.handleIncoming({ chatId: reopenChat, text: 'start again', messageId: 'reopen-start-again' });
   const restarted = store.getContactByChat(reopenChat);
   assert.equal(restarted.currentFieldId, 'language');
   assert.equal(restarted.leadStatus, 'NUEVO');
@@ -226,14 +224,14 @@ function testHumanHandoffAndCancellation() {
     'Después de elegir solo debe compartirse la habitación seleccionada');
   assert.doesNotMatch(englishMessages, /Habitaci[oó]n|Precio para/i, 'La información de la habitación debe estar completamente en inglés');
   service.handleIncoming({ chatId: englishChat, text: 'yes', messageId: 'english-6' });
-  service.handleIncoming({ chatId: englishChat, text: '1', messageId: 'english-7' });
-  service.handleIncoming({ chatId: englishChat, text: '1', messageId: 'english-8' });
   englishMessages = store.pendingOutbox(100).filter((message) => message.contactId === englishContact.id).at(-1).body;
-  assert.match(englishMessages, /Your visit is confirmed/);
-  assert.doesNotMatch(englishMessages, /Habitaci[oó]n/i, 'La confirmación de cita debe estar completamente en inglés');
-  assert.equal(store.getContactByChat(englishChat).appointment.visitTime, '18:00');
-  const remainingTimes = store.getAppointmentAvailability().dates.find((entry) => entry.date === '2026-08-18').times.map((slot) => slot.time);
-  assert.equal(remainingTimes.includes('18:00'), false, 'Una hora ya agendada no debe ofrecerse a otro cliente');
+  assert.match(englishMessages, /https:\/\/koalendar\.com\/e\/meet-with-confort/);
+  assert.match(englishMessages, /Once you have booked your visit/);
+  assert.match(englishMessages, /start again/);
+  assert.doesNotMatch(englishMessages, /Seleccione|Habitación|agendado su visita/i,
+    'El cierre en inglés no debe mezclar información en español');
+  assert.equal(store.getContactByChat(englishChat).appointment, null);
+  assert.equal(store.getContactByChat(englishChat).conversationStatus, 'COMPLETE');
   store.close();
 }
 
@@ -259,8 +257,24 @@ async function testWhatsAppEvents() {
     from: allowedChatId, fromMe: false, body: 'Hola', id: { _serialized: 'auto-allowed-1' }, getChat: async () => directChat,
   });
   await settleEvents();
+  assert.equal(store.getContactByChat(allowedChatId), null, 'El cliente no debe iniciar el bot sin el saludo del admin');
+  client.emit('message', {
+    from: allowedChatId, fromMe: false, body: 'Welcome!', id: { _serialized: 'client-welcome-incoming-1' }, getChat: async () => directChat,
+  });
+  await settleEvents();
+  assert.equal(store.getContactByChat(allowedChatId), null, 'Welcome! recibido nunca debe iniciar el bot');
+  client.emit('message_create', {
+    to: allowedChatId, fromMe: true, body: 'Welcome!', id: { _serialized: 'admin-welcome-outgoing-1' }, getChat: async () => directChat,
+  });
+  await settleEvents();
   assert.equal(store.getContactByChat(allowedChatId).currentFieldId, 'language');
   assert.match(sent.at(-1)[1], /English or Spanish/i);
+  const sentBeforeEmptyEvent = sent.length;
+  client.emit('message', {
+    from: allowedChatId, fromMe: false, body: '', id: { _serialized: 'empty-sync-event' }, getChat: async () => directChat,
+  });
+  await settleEvents();
+  assert.equal(sent.length, sentBeforeEmptyEvent, 'Un evento vacÃ­o de sincronizaciÃ³n no debe generar respuestas');
 
   const blockedChatId = '14165559999@c.us';
   client.emit('message', {
@@ -275,10 +289,20 @@ async function testWhatsAppEvents() {
     from: lidChatId, fromMe: false, body: 'Hola desde LID', id: { _serialized: 'auto-lid-1' }, getChat: async () => null,
   });
   await settleEvents();
-  assert.equal(store.getContactByChat(lidChatId).currentFieldId, 'language', 'Un LID directo nuevo no debe requerir un chat precargado');
+  assert.equal(store.getContactByChat(lidChatId), null, 'Un mensaje normal por LID no debe iniciar el bot');
+  client.emit('message', {
+    from: lidChatId, fromMe: false, body: 'Welcome!', id: { _serialized: 'client-welcome-lid-1' }, getChat: async () => null,
+  });
+  await settleEvents();
+  assert.equal(store.getContactByChat(lidChatId), null, 'Welcome! entrante por LID tampoco debe iniciar');
+  client.emit('message_create', {
+    to: lidChatId, fromMe: true, body: 'Welcome!', id: { _serialized: 'admin-welcome-lid-1' }, getChat: async () => null,
+  });
+  await settleEvents();
+  assert.equal(store.getContactByChat(lidChatId).currentFieldId, 'language', 'Welcome! enviado por el admin debe iniciar un chat LID directo');
 
   client.emit('message', {
-    from: '14378781645@g.us', fromMe: false, body: 'Hola grupo', id: { _serialized: 'group-1' },
+    from: '14378781645@g.us', fromMe: false, body: 'Welcome!', id: { _serialized: 'group-1' },
   });
   await settleEvents();
   assert.equal(store.getContactByChat('14378781645@g.us'), null, 'Los grupos siempre deben quedar excluidos');
@@ -291,13 +315,13 @@ async function testWhatsAppEvents() {
   assert.equal(store.getContactByChat(lidChatId).conversationStatus, 'STOPPED_BY_ADMIN', 'Stop bot debe detener la identidad LID del mismo número');
 
   client.emit('message', {
-    from: lidChatId, fromMe: false, body: 'start bot', id: { _serialized: 'admin-start-from-lid' }, getChat: async () => null,
+    from: lidChatId, fromMe: false, body: 'Welcome!', id: { _serialized: 'client-start-from-lid' }, getChat: async () => null,
   });
   await settleEvents();
-  assert.equal(store.getContactByChat(lidChatId).currentFieldId, 'language', 'El 437 debe poder iniciar su propio bot desde la identidad LID');
+  assert.equal(store.getContactByChat(lidChatId).conversationStatus, 'STOPPED_BY_ADMIN', 'Welcome! entrante no debe reiniciar un bot detenido');
 
   client.emit('message_create', {
-    to: allowedChatId, fromMe: true, body: 'iniciar bot', id: { _serialized: 'admin-start-event' }, getChat: async () => directChat,
+    to: allowedChatId, fromMe: true, body: 'Welcome!', id: { _serialized: 'admin-start-event' }, getChat: async () => directChat,
   });
   await settleEvents();
   assert.equal(store.getContactByChat(allowedChatId).currentFieldId, 'language');
@@ -305,6 +329,14 @@ async function testWhatsAppEvents() {
 }
 
 async function testProductionWhatsAppEvents() {
+  const restartStore = new NewCustomersStore(':memory:');
+  const restartService = createNewCustomersService({ store: restartStore, testMode: false });
+  restartService.activateChat({ chatId: '14165550000@c.us', phoneE164: '+14165550000' });
+  assert.equal(restartStore.pendingOutbox().length, 1);
+  restartService.attach(new EventEmitter());
+  assert.equal(restartStore.pendingOutbox().length, 0, 'Un reinicio no debe enviar mensajes pendientes de una ejecuciÃ³n anterior');
+  restartStore.close();
+
   const store = new NewCustomersStore(':memory:');
   const service = createNewCustomersService({ store, testMode: false, allowMissingMessageTimestamp: true });
   const client = new EventEmitter();
@@ -316,13 +348,13 @@ async function testProductionWhatsAppEvents() {
   client.emit('message_create', {
     to: historicalChatId,
     fromMe: true,
-    body: 'start bot',
+    body: 'Welcome!',
     timestamp: Math.floor(Date.now() / 1000) - 3600,
     id: { _serialized: 'historical-admin-start' },
     getChat: async () => ({ isGroup: false, getContact: async () => ({ number: '14165556660', isMyContact: false }) }),
   });
   await settleEvents();
-  assert.equal(store.getContactByChat(historicalChatId), null, 'Un start bot histórico no debe reabrir chats al vincular WhatsApp');
+  assert.equal(store.getContactByChat(historicalChatId), null, 'Un saludo histórico no debe reabrir chats al vincular WhatsApp');
 
   const historicalIncomingChatId = '14165556659@c.us';
   client.emit('message', {
@@ -357,6 +389,33 @@ async function testProductionWhatsAppEvents() {
     getChat: async () => newDirectChat,
   });
   await settleEvents();
+  assert.equal(store.getContactByChat(newChatId), null, 'Un contacto nuevo no debe iniciar el bot por sí solo');
+  client.emit('message', {
+    from: newChatId,
+    fromMe: false,
+    body: 'start again',
+    id: { _serialized: 'production-new-restart-without-record' },
+    getChat: async () => newDirectChat,
+  });
+  await settleEvents();
+  assert.equal(store.getContactByChat(newChatId), null, 'start again no debe activar un número sin expediente');
+  client.emit('message_create', {
+    to: newChatId,
+    fromMe: true,
+    body: 'Welcome to Confort Place',
+    id: { _serialized: 'production-admin-welcome-1' },
+    getChat: async () => newDirectChat,
+  });
+  await settleEvents();
+  assert.equal(store.getContactByChat(newChatId), null, 'Cualquier texto distinto de Welcome! debe ignorarse');
+  client.emit('message_create', {
+    to: newChatId,
+    fromMe: true,
+    body: 'Welcome!',
+    id: { _serialized: 'production-admin-welcome-exact-1' },
+    getChat: async () => newDirectChat,
+  });
+  await settleEvents();
   assert.equal(store.getContactByChat(newChatId).currentFieldId, 'language');
   assert.match(sent.at(-1)[1], /English or Spanish/i);
 
@@ -365,12 +424,30 @@ async function testProductionWhatsAppEvents() {
   client.emit('message', {
     from: commandChatId,
     fromMe: false,
-    body: 'start bot',
+    body: 'Welcome!',
     id: { _serialized: 'production-new-command-1' },
     getChat: async () => commandDirectChat,
   });
   await settleEvents();
-  assert.equal(store.getContactByChat(commandChatId).currentFieldId, 'language', 'Cualquier texto de un contacto nuevo debe iniciar el bot');
+  assert.equal(store.getContactByChat(commandChatId), null, 'Un cliente que envÃ­e Welcome! nunca debe iniciar el bot');
+  client.emit('message_create', {
+    to: commandChatId,
+    fromMe: true,
+    body: 'Welcome to Confort Place!',
+    id: { _serialized: 'production-admin-welcome-2' },
+    getChat: async () => commandDirectChat,
+  });
+  await settleEvents();
+  assert.equal(store.getContactByChat(commandChatId), null, 'Welcome to Confort Place! no debe aceptarse como alias');
+  client.emit('message_create', {
+    to: commandChatId,
+    fromMe: true,
+    body: 'Welcome!',
+    id: { _serialized: 'production-admin-welcome-exact-2' },
+    getChat: async () => commandDirectChat,
+  });
+  await settleEvents();
+  assert.equal(store.getContactByChat(commandChatId).currentFieldId, 'language', 'El saludo enviado por el admin debe iniciar el bot');
   assert.match(sent.at(-1)[1], /English or Spanish/i);
   client.emit('message', {
     from: commandChatId,
@@ -382,6 +459,17 @@ async function testProductionWhatsAppEvents() {
   await settleEvents();
   assert.equal(store.getContactByChat(commandChatId).currentFieldId, 'occupants', 'La respuesta de idioma debe avanzar después de la bienvenida');
   assert.match(sent.at(-1)[1], /una o dos personas/i);
+
+  const groupChatId = '120363000000000000@g.us';
+  client.emit('message_create', {
+    to: groupChatId,
+    fromMe: true,
+    body: 'Welcome!',
+    id: { _serialized: 'production-admin-group-welcome' },
+    getChat: async () => ({ isGroup: true }),
+  });
+  await settleEvents();
+  assert.equal(store.getContactByChat(groupChatId), null, 'El saludo del admin nunca debe activar un grupo');
 
   client.emit('message_create', {
     to: newChatId,
@@ -398,7 +486,7 @@ async function testProductionWhatsAppEvents() {
 function testManagedInventory() {
   const store = new NewCustomersStore(':memory:');
   const properties = store.listProperties();
-  assert.equal(properties.length, 6, 'El inventario debe contener exactamente las seis ofertas autorizadas');
+  assert.equal(properties.length, 7, 'El inventario inicial debe contener las siete ofertas configuradas');
   assert.deepEqual(properties.map((property) => property.id), [
     '14-hayden',
     '11-huntingwood',
@@ -406,17 +494,38 @@ function testManagedInventory() {
     '152-royal-palm-2',
     '17-hilldowntree-1',
     '17-hilldowntree-2',
+    '26-lincoln',
   ]);
   const huntingwood = properties.find((property) => property.id === '11-huntingwood');
   assert.deepEqual(huntingwood.prices, { 1: 1000, 2: 1200 },
     '11 Huntingwood debe conservar $1,000 para una persona y $1,200 para una pareja');
   assert.equal(huntingwood.mediaItems.length, 1);
   assert.equal(huntingwood.mediaItems[0].mediaPath, 'web/assets/new-customers/11-huntingwood.jpg');
+  const lincoln = properties.find((property) => property.id === '26-lincoln');
+  assert.equal(lincoln.address, '26 Lincoln Ct, Brampton, ON L6T 3Z2');
+  assert.equal(lincoln.maxOccupants, 1);
+  assert.equal(lincoln.parkingSpaces, 1);
+  assert.deepEqual(lincoln.prices, { 1: 1000 });
+  assert.deepEqual(lincoln.mediaItems, [], 'Lincoln debe permanecer sin foto hasta que el admin seleccione una');
 
   const edited = store.updateProperty('14-hayden', { available: false, prices: { 1: 875 } });
   assert.equal(edited.available, false);
   assert.equal(edited.prices[1], 875);
   assert.equal(store.updateProperty('casa-no-autorizada', { available: true }), null);
+
+  const created = store.createProperty({
+    address: '99 Test Ave, Brampton, ON',
+    room: 'Habitación de prueba',
+    available: true,
+    maxOccupants: 1,
+    parkingSpaces: 0,
+    prices: { 1: 700 },
+    mediaItems: [],
+  });
+  assert.ok(created.id);
+  assert.equal(store.listProperties().length, 8, 'El admin debe poder agregar cuartos');
+  assert.equal(store.deleteProperty(created.id).id, created.id);
+  assert.equal(store.getProperty(created.id), null, 'Un cuarto eliminado ya no debe estar disponible');
 
   const service = createNewCustomersService({ store });
   const chatId = '14165558888@c.us';
@@ -427,6 +536,10 @@ function testManagedInventory() {
   service.handleIncoming({ chatId, text: '1 de septiembre', messageId: 'inventory-4' });
   assert.equal(store.getContactByChat(chatId).matchIds.includes('14-hayden'), false,
     'Una oferta no disponible nunca debe recomendarse');
+  assert.equal(store.deleteProperty('17-hilldowntree-1').id, '17-hilldowntree-1');
+  store.migrate();
+  assert.equal(store.getProperty('17-hilldowntree-1'), null,
+    'Una oferta eliminada no debe reaparecer al migrar o reiniciar');
   store.close();
 }
 
@@ -472,7 +585,7 @@ async function testSelectedPropertyMedia() {
 
   for (const [index, expected] of cases.entries()) {
     const store = new NewCustomersStore(':memory:');
-    const service = createNewCustomersService({ store, mediaFactory: (filename) => ({ filename }) });
+    const service = createNewCustomersService({ store, testMode: false, mediaFactory: (filename) => ({ filename }) });
     const chatId = `1416555899${index}@c.us`;
     const sent = [];
     const client = { sendMessage: async (...args) => { sent.push(args); } };
@@ -499,7 +612,7 @@ async function testSelectedPropertyMedia() {
     assert.equal(photos.length, 1, 'Debe enviarse solamente la foto de la habitación seleccionada');
     const textMessages = selectedOutput.filter((entry) => typeof entry[1] === 'string').map((entry) => entry[1]);
     assert.equal(textMessages.length, 1, 'La información no debe duplicarse en un mensaje separado cuando existe foto');
-    assert.match(textMessages[0], /agendar una visita/i);
+    assert.match(textMessages[0], /ver esta propiedad en persona/i);
     assert.doesNotMatch(textMessages[0], /Precio:|Precio para|\$|Huntingwood|Royal Palm/);
     assert.ok(photos[0][1].filename.endsWith(expected.filename));
     assert.match(photos[0][2].caption, new RegExp(expected.price.replace('$', '\\$')));
@@ -522,7 +635,7 @@ async function testSelectedPropertyMedia() {
   const textService = createNewCustomersService({ store: textStore });
   const textChatId = '14165558995@c.us';
   textService.activateChat({ chatId: textChatId, messageId: 'no-photo-start' });
-  ['Español', '1 persona', 'no', '1 de septiembre', '5'].forEach((text, index) => {
+  ['Español', '1 persona', 'no', '1 de septiembre', '6'].forEach((text, index) => {
     textService.handleIncoming({ chatId: textChatId, text, messageId: `no-photo-${index + 1}` });
   });
   const textContact = textStore.getContactByChat(textChatId);
@@ -530,31 +643,52 @@ async function testSelectedPropertyMedia() {
   assert.equal(noPhotoOutput.filter((message) => message.mediaPath).length, 0);
   assert.match(noPhotoOutput[0].body, /17 Hilldowntree.+\$850 CAD/s,
     'Sin foto debe conservarse un mensaje de texto con la información de la habitación');
-  assert.match(noPhotoOutput[1].body, /agendar una visita/i);
+  assert.match(noPhotoOutput[1].body, /ver esta propiedad en persona/i);
   textStore.close();
 }
 
 async function main() {
+  await testNavigationResilience();
   const store = new NewCustomersStore(':memory:');
-  const service = createNewCustomersService({ store, testMode: true, mediaFactory: (filename) => ({ filename }) });
+  const service = createNewCustomersService({
+    store,
+    testMode: true,
+    mediaFactory: (filename) => ({ filename }),
+    readSettings: () => ({ newCustomersTestMode: true }),
+    writeSettings: (settings) => settings,
+  });
   assert.equal(service.policyInfo().testMode, true);
   assert.deepEqual(service.policyInfo().allowedNumbers, ['4378781645']);
   assert.deepEqual(service.policyInfo().adminNumbers, ['4378781645']);
   assert.equal(service.isAdminIdentity('14378781645@c.us'), true);
   assert.equal(service.isAdminIdentity('14165550123@c.us'), false);
-  assert.equal(service.shouldAutoActivate('14378781645@c.us', { isMyContact: true }), true);
+  assert.equal(service.shouldAutoActivate('14378781645@c.us', { isMyContact: true }), false);
   assert.equal(service.shouldAutoActivate('14165550123@c.us', { isMyContact: false }), false);
+  service.setTestMode(false, { persist: false });
+  assert.equal(service.shouldAutoActivate('14165550123@c.us', { isMyContact: false }), false);
+  service.setTestMode(true, { persist: false });
+  assert.equal(service.shouldAutoActivate('14165550123@c.us', { isMyContact: false }), false);
+  assert.equal(service.policyInfo().paused, false);
+  service.setPaused(true, { persist: false });
+  assert.equal(service.policyInfo().paused, true);
+  assert.equal(
+    service.handleIncoming({ chatId: '14165550123@c.us', text: 'hello', messageId: 'paused-message' }).reason,
+    'GLOBAL_PAUSED'
+  );
+  assert.equal(store.isProcessed('paused-message'), true, 'Un mensaje recibido durante la pausa no debe recuperarse despues');
+  service.setPaused(false, { persist: false });
+  assert.equal(service.policyInfo().paused, false);
   assert.equal(isDirectChat('14378781645@g.us'), false);
   assert.equal(isDirectChat('14378781645@lid'), true);
 
   const productionStore = new NewCustomersStore(':memory:');
   const productionService = createNewCustomersService({ store: productionStore, testMode: false });
-  assert.equal(productionService.shouldAutoActivate('14165550123@c.us', { isMyContact: false }), true);
+  assert.equal(productionService.shouldAutoActivate('14165550123@c.us', { isMyContact: false }), false);
   assert.equal(productionService.shouldAutoActivate('14165550123@c.us', { isMyContact: true }), false);
   productionStore.close();
 
   testManagedInventory();
-  testHumanHandoffAndCancellation();
+  testHumanHandoffAndRestart();
   await testSelectedPropertyMedia();
   await testWhatsAppEvents();
   await testProductionWhatsAppEvents();
@@ -566,6 +700,7 @@ async function main() {
     ['/', 'text/html'], ['/reminders', 'text/html'], ['/new-customers-info', 'text/html'],
     ['/api/reminders', 'application/json'], ['/api/settings', 'application/json'], ['/api/status', 'application/json'],
     ['/api/new-customers-info/status', 'application/json'], ['/api/new-customers-info/stats', 'application/json'],
+    ['/api/new-customers-info/whatsapp/status', 'application/json'],
     ['/api/new-customers-info/contacts', 'application/json'], ['/api/new-customers-info/properties', 'application/json'],
     ['/api/new-customers-info/appointment-settings', 'application/json'], ['/api/new-customers-info/appointments', 'application/json'],
     ['/assets/new-customers/14-hayden.jpg', 'image/jpeg'],
@@ -580,9 +715,20 @@ async function main() {
         const page = await response.text();
         assert.match(page, /Confort Place New Customers Info/);
         assert.match(page, /Disponibilidad de casas/);
+        assert.match(page, /addPropertyButton/);
+        assert.match(page, /Agregar cuarto/);
         assert.match(page, /Disponibilidad para visitas/);
         assert.match(page, /addAppointmentWindowButton/);
         assert.match(page, /Agregar horario/);
+        assert.match(page, /customerModeToggle/);
+        assert.match(page, /customerBotPauseToggle/);
+        assert.match(page, /Pausar bot/);
+        assert.match(page, /adminHelpButton/);
+        assert.match(page, /adminHelpDialog/);
+        assert.match(page, /CÃ³mo funciona el bot de clientes nuevos|Cómo funciona el bot de clientes nuevos/);
+        assert.match(page, /Welcome!/);
+        assert.match(page, /Stop bot/);
+        assert.match(page, /koalendar\.com\/e\/meet-with-confort/);
       }
       if (route === '/reminders') assert.match(await response.text(), /Reminder Control/);
     }
@@ -591,11 +737,35 @@ async function main() {
     assert.deepEqual(policy.policy.allowedNumbers, ['4378781645']);
     assert.deepEqual(policy.policy.adminNumbers, ['4378781645']);
     assert.equal(policy.stopCommand, 'stop bot');
-    assert.equal(policy.activationCommand, 'start bot');
-    assert.deepEqual(policy.activationCommands, ['start bot', 'iniciar bot']);
-    const settingsResponse = await fetch(`http://127.0.0.1:${port}/api/settings`);
-    const persistedSettings = await settingsResponse.json();
-    assert.equal(persistedSettings.newCustomersTestMode, false);
+    assert.equal(policy.activationCommand, 'Welcome!');
+    assert.deepEqual(policy.activationCommands, ['Welcome!']);
+    assert.deepEqual(policy.restartCommands, ['start again', 'iniciar de nuevo']);
+    assert.equal(policy.schedulingUrl, 'https://koalendar.com/e/meet-with-confort');
+    assert.equal(policy.policy.automaticTrigger, 'ADMIN_OUTBOUND_WELCOME_COMMAND');
+    const developmentMode = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/mode`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ testMode: true }),
+    });
+    assert.equal(developmentMode.status, 200);
+    assert.equal((await developmentMode.json()).policy.testMode, true);
+    assert.equal(service.shouldAutoActivate('14165550123@c.us', { isMyContact: false }), false);
+    const pauseMode = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/pause`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paused: true }),
+    });
+    assert.equal(pauseMode.status, 200);
+    assert.equal((await pauseMode.json()).policy.paused, true);
+    const pausedStatus = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/status`);
+    assert.equal((await pausedStatus.json()).policy.paused, true);
+    const resumeMode = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/pause`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paused: false }),
+    });
+    assert.equal(resumeMode.status, 200);
+    assert.equal((await resumeMode.json()).policy.paused, false);
 
     const update = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/contacts/${contactId}/status`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'SEGUIMIENTO' }),
@@ -605,7 +775,10 @@ async function main() {
 
     const propertiesResponse = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/properties`);
     const inventory = await propertiesResponse.json();
-    assert.equal(inventory.properties.length, 6);
+    assert.equal(inventory.properties.length, 7);
+    const lincoln = inventory.properties.find((property) => property.id === '26-lincoln');
+    assert.equal(lincoln.prices[1], 1000);
+    assert.equal(lincoln.parkingSpaces, 1);
     const propertyUpdate = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/properties/11-huntingwood`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -619,10 +792,22 @@ async function main() {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ available: true }),
     });
     assert.equal(invalidProperty.status, 404);
-    const createProperty = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/properties`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address: 'Otra casa' }),
+    const createPropertyResponse = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/properties`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        address: '99 Test Ave, Brampton, ON', room: 'Habitación de prueba', available: true,
+        maxOccupants: 1, parkingSpaces: 0, prices: { 1: 700 }, mediaItems: [],
+      }),
     });
-    assert.equal(createProperty.status, 404, 'No debe existir una ruta para crear casas adicionales');
+    assert.equal(createPropertyResponse.status, 201, 'El dashboard debe poder crear cuartos adicionales');
+    const createdProperty = (await createPropertyResponse.json()).property;
+    assert.equal(createdProperty.address, '99 Test Ave, Brampton, ON');
+    const deletePropertyResponse = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/properties/${createdProperty.id}`, {
+      method: 'DELETE',
+    });
+    assert.equal(deletePropertyResponse.status, 200, 'El dashboard debe poder eliminar cuartos');
+    assert.equal(service.store.getProperty(createdProperty.id), null);
 
     const settingsUpdate = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/appointment-settings`, {
       method: 'PATCH',
@@ -649,8 +834,7 @@ async function main() {
     assert.deepEqual(saturdayTimes, ['13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30']);
     const appointmentsResponse = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/appointments?status=SCHEDULED`);
     const appointments = (await appointmentsResponse.json()).appointments;
-    assert.equal(appointments.length, 1);
-    assert.equal(appointments[0].contactId, contactId);
+    assert.equal(appointments.length, 0, 'El bot ya no debe crear citas internas al usar Koalendar');
 
     const clearWindowsResponse = await fetch(`http://127.0.0.1:${port}/api/new-customers-info/appointment-settings`, {
       method: 'PATCH',
@@ -666,7 +850,7 @@ async function main() {
     assert.equal(deleteResponse.status, 200);
     assert.equal(service.store.getContact(contactId), null);
     assert.equal(service.store.listAppointments({ status: 'SCHEDULED' }).length, 0, 'Borrar el contacto también debe retirar su cita');
-    console.log(`${checks.length} rutas, inventario fijo, agenda, borrado, atención humana, Stop bot, medios y flujo conversacional verificados correctamente.`);
+    console.log(`${checks.length} rutas, inventario administrable, Koalendar, reinicio limpio, borrado, atención humana, Stop bot, medios y flujo conversacional verificados correctamente.`);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     store.close();

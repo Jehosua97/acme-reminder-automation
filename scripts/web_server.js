@@ -15,6 +15,7 @@ const RUNTIME = path.join(PROJECT_ROOT, 'runtime');
 const WEB_ROOT = path.join(PROJECT_ROOT, 'web');
 const UPLOAD_ROOT = path.join(PROJECT_ROOT, 'data', 'uploads');
 const PORT = Number(process.env.PORT || 3000);
+const NEW_CUSTOMERS_API_URL = process.env.NEW_CUSTOMERS_API_URL || 'http://127.0.0.1:3001';
 
 function safeImageExtension(mime, originalName = '') {
   const lower = String(originalName || '').toLowerCase();
@@ -50,6 +51,7 @@ function saveUploadedImage(body = {}) {
 function createApp(options = {}) {
   const app = express();
   const newCustomersService = options.newCustomersService || createNewCustomersService();
+  const proxyCustomerRuntime = options.proxyCustomerRuntime ?? !options.newCustomersService;
   const systemService = createSystemService({
     projectRoot: PROJECT_ROOT,
     runtime: RUNTIME,
@@ -68,6 +70,74 @@ function createApp(options = {}) {
   app.post('/api/uploads/image', (req, res) => {
     try { res.json({ ok: true, image: saveUploadedImage(req.body || {}) }); }
     catch (error) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get('/api/new-customers-info/whatsapp/status', async (req, res) => {
+    if (proxyCustomerRuntime) {
+      try {
+        const response = await fetch(`${NEW_CUSTOMERS_API_URL}/api/new-customers-info/whatsapp/status`, {
+          signal: AbortSignal.timeout(4000),
+        });
+        const payload = await response.json();
+        return res.status(response.status).json(payload);
+      } catch {}
+    }
+    try {
+      const statusFile = path.join(RUNTIME, 'new_customers_whatsapp_status.json');
+      const persisted = fs.existsSync(statusFile)
+        ? JSON.parse(fs.readFileSync(statusFile, 'utf8'))
+        : { service: 'new-customers-info', status: 'STOPPED' };
+      return res.json({
+        ...persisted,
+        mode: newCustomersService.policyInfo().testMode ? 'development' : 'production',
+      });
+    } catch (error) { return res.status(500).json({ error: error.message }); }
+  });
+
+  app.patch('/api/new-customers-info/mode', async (req, res) => {
+    try {
+      if (typeof req.body?.testMode !== 'boolean') {
+        return res.status(400).json({ error: 'testMode debe ser true o false.' });
+      }
+      const localPolicy = newCustomersService.setTestMode(req.body.testMode);
+      if (proxyCustomerRuntime) {
+        try {
+          const response = await fetch(`${NEW_CUSTOMERS_API_URL}/api/new-customers-info/mode`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ testMode: req.body.testMode }),
+            signal: AbortSignal.timeout(4000),
+          });
+          const payload = await response.json();
+          if (response.ok) return res.json(payload);
+        } catch {}
+      }
+      // The persisted value is loaded by the customer worker on its next recovery
+      // even when its local API is temporarily unavailable.
+      return res.json({ ok: true, policy: localPolicy, workerPending: proxyCustomerRuntime });
+    } catch (error) { return res.status(500).json({ error: error.message }); }
+  });
+
+  app.patch('/api/new-customers-info/pause', async (req, res) => {
+    try {
+      if (typeof req.body?.paused !== 'boolean') {
+        return res.status(400).json({ error: 'paused debe ser true o false.' });
+      }
+      const localPolicy = newCustomersService.setPaused(req.body.paused);
+      if (proxyCustomerRuntime) {
+        try {
+          const response = await fetch(`${NEW_CUSTOMERS_API_URL}/api/new-customers-info/pause`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paused: req.body.paused }),
+            signal: AbortSignal.timeout(4000),
+          });
+          const payload = await response.json();
+          if (response.ok) return res.json(payload);
+        } catch {}
+      }
+      return res.json({ ok: true, policy: localPolicy, workerPending: proxyCustomerRuntime });
+    } catch (error) { return res.status(500).json({ error: error.message }); }
   });
 
   app.use('/api', createReminderRouter(store));

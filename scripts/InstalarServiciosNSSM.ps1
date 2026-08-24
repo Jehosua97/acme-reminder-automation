@@ -84,6 +84,7 @@ function Stop-ManualProcesses {
 function Set-CommonServiceOptions([string]$Name) {
     & $Nssm set $Name Start SERVICE_AUTO_START | Out-Null
     & $Nssm set $Name AppDirectory $ProjectRoot | Out-Null
+    & $Nssm set $Name AppNoConsole 1 | Out-Null
     & $Nssm set $Name AppStdout (Join-Path $Runtime "$Name.out.log") | Out-Null
     & $Nssm set $Name AppStderr (Join-Path $Runtime "$Name.err.log") | Out-Null
     & $Nssm set $Name AppRotateFiles 1 | Out-Null
@@ -92,6 +93,11 @@ function Set-CommonServiceOptions([string]$Name) {
     & $Nssm set $Name AppThrottle 1500 | Out-Null
     & $Nssm set $Name AppRestartDelay 10000 | Out-Null
     & $Nssm set $Name AppExit Default Restart | Out-Null
+
+    # NSSM reinicia la aplicacion hija. Esta segunda capa hace que Windows
+    # reinicie tambien el servicio si el propio proceso de NSSM llega a fallar.
+    & sc.exe failure $Name 'reset=' 86400 'actions=' 'restart/5000/restart/10000/restart/30000' | Out-Null
+    & sc.exe failureflag $Name 1 | Out-Null
 }
 
 Assert-Admin

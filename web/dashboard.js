@@ -1,5 +1,7 @@
 'use strict';
 
+const CUSTOMER_RUNTIME_API = 'http://127.0.0.1:3001/api/new-customers-info';
+
 const state = {
   contacts: [],
   properties: [],
@@ -9,6 +11,9 @@ const state = {
   propertyMedia: [],
   inventoryWritable: false,
   appointmentsWritable: false,
+  testMode: null,
+  botPaused: null,
+  allowedTestNumbers: [],
   searchTimer: null,
 };
 const STATUS_LABELS = {
@@ -59,6 +64,7 @@ const EVENT_LABELS = {
   APPOINTMENT_CANCELLATION_REQUESTED: 'Cancelación solicitada',
   APPOINTMENT_CANCELLATION_DECLINED: 'Cita conservada',
   APPOINTMENT_CANCELLED: 'Cita cancelada',
+  KOALENDAR_LINK_SENT: 'Enlace de Koalendar enviado',
   HUMAN_HANDOFF_REQUESTED: 'Atención humana solicitada',
 };
 const $ = (id) => document.getElementById(id);
@@ -191,7 +197,7 @@ function renderProperties() {
   $('metricPropertyImages').textContent = imageCount;
 
   if (!state.properties.length) {
-    $('propertiesTable').innerHTML = '<tr class="empty-contact-row"><td colspan="10">No se pudo cargar el inventario autorizado.</td></tr>';
+    $('propertiesTable').innerHTML = '<tr class="empty-contact-row"><td colspan="10">No hay cuartos en el inventario. Usa “Agregar cuarto” para crear el primero.</td></tr>';
     return;
   }
 
@@ -209,7 +215,7 @@ function renderProperties() {
       <td>${escapeHtml(money(property.prices[2]))}</td>
       <td><div class="property-photo-stack">${photos || '<span class="property-no-photo">Sin fotos</span>'}</div></td>
       <td>${escapeHtml(dateTime(property.updatedAt))}</td>
-      <td><button type="button" class="small edit-property" data-id="${escapeHtml(property.id)}" ${state.inventoryWritable ? '' : 'disabled'}>Editar</button></td>
+      <td><div class="property-actions"><button type="button" class="small edit-property" data-id="${escapeHtml(property.id)}" ${state.inventoryWritable ? '' : 'disabled'}>Editar</button><button type="button" class="small danger delete-property" data-id="${escapeHtml(property.id)}" ${state.inventoryWritable ? '' : 'disabled'}>Eliminar</button></div></td>
     </tr>`;
   }).join('');
 
@@ -219,14 +225,18 @@ function renderProperties() {
   document.querySelectorAll('.edit-property').forEach((button) => {
     button.addEventListener('click', () => openProperty(button.dataset.id));
   });
+  document.querySelectorAll('.delete-property').forEach((button) => {
+    button.addEventListener('click', () => deleteProperty(button.dataset.id));
+  });
 }
 
 async function loadProperties() {
   try {
     const data = await request('/api/new-customers-info/properties');
     const properties = Array.isArray(data.properties) ? data.properties : [];
-    state.inventoryWritable = properties.length > 0
-      && properties.every((property) => Object.prototype.hasOwnProperty.call(property, 'available'));
+    state.inventoryWritable = data.writable === true || (properties.length > 0
+      && properties.every((property) => Object.prototype.hasOwnProperty.call(property, 'available')));
+    $('addPropertyButton').disabled = !state.inventoryWritable;
     state.properties = properties.map((property) => ({
       ...property,
       available: property.available !== false,
@@ -409,12 +419,23 @@ function syncPriceTwoField() {
 
 function renderPropertyImages() {
   $('propertyImagesPreview').innerHTML = state.propertyMedia.length
-    ? state.propertyMedia.map((media, index) => `<article class="property-image-card">
+    ? state.propertyMedia.map((media, index) => `<article class="property-image-card ${index === 0 ? 'primary' : ''}">
         <img src="${escapeHtml(media.mediaUrl)}" alt="${escapeHtml(media.mediaName || 'Foto de la oferta')}" />
-        <span title="${escapeHtml(media.mediaName || '')}">${escapeHtml(media.mediaName || 'Foto')}</span>
-        <button type="button" class="remove-property-image" data-index="${index}">Quitar</button>
+        ${index === 0 ? '<strong class="property-image-primary-badge">Principal</strong>' : ''}
+        <span class="property-image-name" title="${escapeHtml(media.mediaName || '')}">${escapeHtml(media.mediaName || 'Foto')}</span>
+        <div class="property-image-actions">
+          ${index > 0 ? `<button type="button" class="secondary make-property-image-primary" data-index="${index}">Hacer principal</button>` : ''}
+          <button type="button" class="danger remove-property-image" data-index="${index}">Quitar</button>
+        </div>
       </article>`).join('')
     : '<div class="property-images-empty">Esta oferta todavía no tiene fotos.</div>';
+  document.querySelectorAll('.make-property-image-primary').forEach((button) => {
+    button.addEventListener('click', () => {
+      const [selected] = state.propertyMedia.splice(Number(button.dataset.index), 1);
+      state.propertyMedia.unshift(selected);
+      renderPropertyImages();
+    });
+  });
   document.querySelectorAll('.remove-property-image').forEach((button) => {
     button.addEventListener('click', () => {
       state.propertyMedia.splice(Number(button.dataset.index), 1);
@@ -436,7 +457,7 @@ function openProperty(id) {
   $('propertyPriceTwo').value = String(property.prices[2] || '');
   $('propertyImages').value = '';
   $('propertyDialogTitle').textContent = property.address;
-  $('propertyDialogSubtitle').textContent = `${property.room} · Oferta fija ${property.id}`;
+  $('propertyDialogSubtitle').textContent = `${property.room} · Edita lo que verá el cliente`;
   state.propertyMedia = (property.mediaItems || []).map((media) => ({ ...media }));
   syncPriceTwoField();
   renderPropertyImages();
@@ -498,16 +519,20 @@ async function saveProperty(event) {
       },
       mediaItems: [...state.propertyMedia, ...uploaded],
     };
-    const data = await request(`/api/new-customers-info/properties/${encodeURIComponent($('propertyId').value)}`, {
-      method: 'PATCH',
+    const propertyId = $('propertyId').value;
+    const data = await request(propertyId
+      ? `/api/new-customers-info/properties/${encodeURIComponent(propertyId)}`
+      : '/api/new-customers-info/properties', {
+      method: propertyId ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     const index = state.properties.findIndex((property) => property.id === data.property.id);
     if (index >= 0) state.properties[index] = data.property;
+    else state.properties.push(data.property);
     renderProperties();
     closePropertyDialog();
-    showToast('Oferta actualizada. El bot ya usará estos datos.');
+    showToast(propertyId ? 'Oferta actualizada. El bot ya usará estos datos.' : 'Cuarto agregado al inventario.');
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -624,14 +649,47 @@ async function loadDashboard() {
 
 async function loadSystemStatus() {
   const pill = $('workerStatus');
+  const modeButton = $('customerModeToggle');
+  const pauseButton = $('customerBotPauseToggle');
   try {
-    const status = await request('/api/new-customers-info/whatsapp/status');
+    const [status, moduleStatus] = await Promise.all([
+      request(`${CUSTOMER_RUNTIME_API}/whatsapp/status`),
+      request(`${CUSTOMER_RUNTIME_API}/status`),
+    ]);
+    state.testMode = moduleStatus.policy.testMode === true;
+    state.botPaused = moduleStatus.policy.paused === true;
+    state.allowedTestNumbers = moduleStatus.policy.allowedNumbers || [];
+    pauseButton.disabled = false;
+    pauseButton.className = `customer-bot-pause-toggle ${state.botPaused ? 'paused' : 'running'}`;
+    pauseButton.setAttribute('aria-pressed', String(state.botPaused));
+    pauseButton.querySelector('.customer-bot-control-label').textContent = state.botPaused
+      ? 'Continuar bot'
+      : 'Pausar bot';
+    pauseButton.title = state.botPaused
+      ? 'Bot pausado: presiona para continuar'
+      : 'Bot activo: presiona para pausar';
+    modeButton.disabled = false;
+    modeButton.className = `customer-mode-toggle ${state.testMode ? 'development' : 'production'}`;
+    modeButton.setAttribute('aria-pressed', String(state.testMode));
+    modeButton.textContent = state.testMode
+      ? 'Modo desarrollo: ACTIVADO'
+      : 'Modo desarrollo: DESACTIVADO';
+    if (state.testMode) {
+      $('customerModeHelp').innerHTML = `Modo desarrollo: el admin debe enviar exactamente <code>Welcome!</code> al chat de <strong>${escapeHtml(state.allowedTestNumbers[0] || '4378781645')}</strong>. Ning&uacute;n mensaje entrante inicia el bot; un cliente ya registrado puede reiniciar con <code>start again</code> o <code>iniciar de nuevo</code>. Todos los grupos se ignoran.`;
+    } else {
+      $('customerModeHelp').innerHTML = 'Modo producci&oacute;n: el bot s&oacute;lo inicia cuando el admin env&iacute;a exactamente <code>Welcome!</code> dentro de un chat individual. Un cliente ya registrado puede comenzar desde cero con <code>start again</code> o <code>iniciar de nuevo</code>; <code>Stop bot</code> lo detiene y los grupos siempre se ignoran.';
+    }
     pill.className = 'status-pill';
     if (status.status === 'READY') {
-      pill.textContent = `WhatsApp clientes: conectado ${status.linkedNumberMasked || ''}`.trim();
-      pill.classList.add('ok');
+      pill.textContent = state.botPaused
+        ? `WhatsApp conectado ${status.linkedNumberMasked || ''} · BOT PAUSADO`.trim()
+        : `WhatsApp clientes: conectado ${status.linkedNumberMasked || ''}`.trim();
+      pill.classList.add(state.botPaused ? 'paused' : 'ok');
     } else if (status.status === 'WAITING_FOR_QR') {
       pill.textContent = 'WhatsApp clientes: esperando QR';
+      pill.classList.add('paused');
+    } else if (status.status === 'WAITING_FOR_PHONE_LINK') {
+      pill.textContent = `WhatsApp clientes: vinculación pendiente (${status.pairingCode || 'código en proceso'})`;
       pill.classList.add('paused');
     } else {
       pill.textContent = `WhatsApp clientes: ${status.status || 'detenido'}`;
@@ -640,6 +698,92 @@ async function loadSystemStatus() {
   } catch {
     pill.textContent = 'Servicio: estado no disponible';
     pill.className = 'status-pill bad';
+    modeButton.disabled = true;
+    modeButton.className = 'customer-mode-toggle';
+    modeButton.textContent = 'Modo desarrollo: no disponible';
+    state.botPaused = null;
+    pauseButton.disabled = true;
+    pauseButton.className = 'customer-bot-pause-toggle checking';
+    pauseButton.setAttribute('aria-pressed', 'false');
+    pauseButton.querySelector('.customer-bot-control-label').textContent = 'Estado no disponible';
+    pauseButton.title = 'No fue posible consultar el estado del bot';
+  }
+}
+
+async function deleteProperty(id) {
+  const property = state.properties.find((item) => item.id === id);
+  if (!property) return;
+  const confirmed = window.confirm(`¿Eliminar ${property.address} · ${property.room} del inventario?\n\nEl bot dejará de ofrecerlo inmediatamente.`);
+  if (!confirmed) return;
+  try {
+    await request(`/api/new-customers-info/properties/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    state.properties = state.properties.filter((item) => item.id !== id);
+    renderProperties();
+    showToast('Cuarto eliminado del inventario.');
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function openNewProperty() {
+  $('propertyId').value = '';
+  $('propertyAddress').value = '';
+  $('propertyRoom').value = 'Habitación disponible';
+  $('propertyAvailable').value = 'true';
+  $('propertyMaxOccupants').value = '1';
+  $('propertyParkingSpaces').value = '0';
+  $('propertyPriceOne').value = '';
+  $('propertyPriceTwo').value = '';
+  $('propertyImages').value = '';
+  $('propertyDialogTitle').textContent = 'Agregar cuarto';
+  $('propertyDialogSubtitle').textContent = 'Configura la información que verá el cliente.';
+  state.propertyMedia = [];
+  syncPriceTwoField();
+  renderPropertyImages();
+  $('propertyDialog').showModal();
+}
+
+async function toggleCustomerBotPause() {
+  if (state.botPaused === null) return;
+  const pauseButton = $('customerBotPauseToggle');
+  const nextPaused = !state.botPaused;
+  pauseButton.disabled = true;
+  try {
+    const data = await request(`${CUSTOMER_RUNTIME_API}/pause`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paused: nextPaused }),
+    });
+    state.botPaused = data.policy.paused === true;
+    showToast(state.botPaused
+      ? 'Bot de clientes nuevos pausado.'
+      : 'Bot de clientes nuevos reanudado.');
+    await loadSystemStatus();
+  } catch (error) {
+    showToast(error.message);
+    pauseButton.disabled = false;
+  }
+}
+
+async function toggleCustomerMode() {
+  if (state.testMode === null) return;
+  const enableDevelopment = !state.testMode;
+  if (!enableDevelopment && !window.confirm('Al desactivar desarrollo, el admin podrá iniciar el bot en cualquier chat individual enviando exactamente Welcome!. Los mensajes entrantes nunca lo activan. ¿Continuar?')) return;
+  const button = $('customerModeToggle');
+  button.disabled = true;
+  try {
+    await request(`${CUSTOMER_RUNTIME_API}/mode`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ testMode: enableDevelopment }),
+    });
+    showToast(enableDevelopment
+      ? 'Modo desarrollo activado: solo 4378781645.'
+      : 'Modo producción activado.');
+    await loadSystemStatus();
+  } catch (error) {
+    showToast(error.message);
+    button.disabled = false;
   }
 }
 
@@ -650,7 +794,17 @@ function showToast(message) {
   showToast.timer = setTimeout(() => $('toast').classList.remove('show'), 2600);
 }
 
+function openAdminHelp() {
+  $('adminHelpDialog').showModal();
+}
+
 $('refreshButton').addEventListener('click', () => { loadDashboard(); loadSystemStatus(); });
+$('adminHelpButton').addEventListener('click', openAdminHelp);
+$('adminHelpDialog').addEventListener('click', (event) => {
+  if (event.target === $('adminHelpDialog')) $('adminHelpDialog').close();
+});
+$('customerModeToggle').addEventListener('click', toggleCustomerMode);
+$('customerBotPauseToggle').addEventListener('click', toggleCustomerBotPause);
 $('statusFilter').addEventListener('change', loadDashboard);
 $('searchInput').addEventListener('input', () => {
   clearTimeout(state.searchTimer);
@@ -659,6 +813,7 @@ $('searchInput').addEventListener('input', () => {
 $('showContactsButton').addEventListener('click', () => selectAdminView('contacts'));
 $('showPropertiesButton').addEventListener('click', () => selectAdminView('properties'));
 $('showAppointmentsButton').addEventListener('click', () => selectAdminView('appointments'));
+$('addPropertyButton').addEventListener('click', openNewProperty);
 $('refreshPropertiesButton').addEventListener('click', loadProperties);
 $('refreshAppointmentsButton').addEventListener('click', loadAppointmentDashboard);
 $('addAppointmentWindowButton').addEventListener('click', addAppointmentWindow);

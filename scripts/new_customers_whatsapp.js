@@ -9,6 +9,7 @@ const QRCode = require('qrcode-terminal/vendor/QRCode');
 const QRErrorCorrectLevel = require('qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel');
 const { createNewCustomersService } = require('./modules/new-customers-info/service');
 const { createNewCustomersInfoRouter } = require('./modules/new-customers-info/routes');
+const { makeInjectionNavigationResilient } = require('./navigation_resilient_client');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const RUNTIME = path.join(PROJECT_ROOT, 'runtime');
@@ -20,7 +21,9 @@ const LOCK_FILE = path.join(RUNTIME, 'new_customers_whatsapp.lock');
 const QR_SVG_FILE = path.join(RUNTIME, 'new_customers_whatsapp_qr.svg');
 const QR_PNG_FILE = path.join(RUNTIME, 'new_customers_whatsapp_qr.png');
 const API_PORT = Number(process.env.NEW_CUSTOMERS_API_PORT || 3001);
-const WWEB_VERSION = process.env.WWEB_VERSION || '2.3000.1043159177-alpha';
+const LINK_PHONE_NUMBER = String(process.env.NEW_CUSTOMERS_LINK_PHONE || '14379953386').replace(/\D/g, '');
+const PHONE_PAIRING_ENABLED = String(process.env.NEW_CUSTOMERS_PAIRING_METHOD || 'qr').trim().toLowerCase() === 'phone';
+const WWEB_VERSION = process.env.WWEB_VERSION || '2.3000.1045862343-alpha';
 const WWEB_REMOTE_CACHE = 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html';
 const WWEB_LOCAL_CACHE_FILE = path.join(CACHE_ROOT, `${WWEB_VERSION}.html`);
 const EXIT_RESTART = 75;
@@ -115,6 +118,16 @@ writeState('STARTING');
 
 const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'new-customers-info', dataPath: AUTH_ROOT }),
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+  deviceName: 'Confort Place New Customers',
+  browserName: 'Chrome',
+  ...(PHONE_PAIRING_ENABLED ? {
+    pairWithPhoneNumber: {
+      phoneNumber: LINK_PHONE_NUMBER,
+      showNotification: true,
+      intervalMs: 180000,
+    },
+  } : {}),
   webVersion: WWEB_VERSION,
   webVersionCache: fs.existsSync(WWEB_LOCAL_CACHE_FILE)
     ? { type: 'local', path: CACHE_ROOT, strict: true }
@@ -133,6 +146,44 @@ const client = new Client({
   },
 });
 
+const rawRequestPairingCode = client.requestPairingCode.bind(client);
+let pairingRetryTimer = null;
+function schedulePairingCodeRetry(args) {
+  if (pairingRetryTimer) clearTimeout(pairingRetryTimer);
+  pairingRetryTimer = setTimeout(() => {
+    pairingRetryTimer = null;
+    if (currentState.status === 'READY' || shuttingDown) return;
+    client.requestPairingCode(...args).catch(() => {});
+  }, 60000);
+}
+
+// WhatsApp can temporarily reject rapid code regeneration. The library starts
+// this promise without awaiting it, so handle that rejection here to keep the
+// authenticated browser alive instead of entering a restart/rate-limit loop.
+client.requestPairingCode = (...args) => rawRequestPairingCode(...args).catch((error) => {
+  const errorMessage = String(error?.message || error || 'No fue posible generar el codigo.').slice(0, 500);
+  writeState('PAIRING_CODE_RETRY', {
+    qrAvailable: false,
+    linkPhoneMasked: LINK_PHONE_NUMBER ? `***${LINK_PHONE_NUMBER.slice(-4)}` : '',
+    error: errorMessage,
+  });
+  console.warn(`New Customers WhatsApp: WhatsApp pospuso el codigo; reintentando en 60 segundos (${errorMessage}).`);
+  schedulePairingCodeRetry(args);
+  return '';
+});
+
+makeInjectionNavigationResilient(client, {
+  onRetry: (error, attempt, maxAttempts) => {
+    const errorMessage = String(error?.message || error).slice(0, 500);
+    writeState('RECOVERING_NAVIGATION', {
+      attempt,
+      maxAttempts,
+      error: errorMessage,
+    });
+    console.warn(`New Customers WhatsApp: recarga interna detectada; recuperando sesion (${attempt}/${maxAttempts}).`);
+  },
+});
+
 const newCustomersService = createNewCustomersService({ filename: DATABASE_FILE });
 newCustomersService.attach(client);
 
@@ -141,18 +192,44 @@ api.use((req, res, next) => {
   const allowedOrigins = new Set(['http://localhost:3000', 'http://127.0.0.1:3000']);
   const origin = String(req.headers.origin || '');
   if (allowedOrigins.has(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Vary', 'Origin');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   return next();
 });
 api.use(express.json({ limit: '18mb' }));
-api.get('/api/new-customers-info/whatsapp/status', (req, res) => res.json({ ...currentState, qrAvailable: fs.existsSync(QR_PNG_FILE) }));
+api.get('/api/new-customers-info/whatsapp/status', (req, res) => res.json({
+  ...currentState,
+  qrAvailable: fs.existsSync(QR_PNG_FILE),
+  mode: newCustomersService.policyInfo().testMode ? 'development' : 'production',
+}));
 api.get('/api/new-customers-info/whatsapp/qr', (req, res) => {
   if (!fs.existsSync(QR_PNG_FILE)) return res.status(404).json({ error: 'No hay un QR pendiente.' });
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   return res.sendFile(QR_PNG_FILE);
+});
+api.post('/api/new-customers-info/whatsapp/pairing-code', async (req, res) => {
+  if (currentState.status === 'READY') return res.status(409).json({ error: 'WhatsApp ya esta vinculado.' });
+  try {
+    const pairingCode = await rawRequestPairingCode(LINK_PHONE_NUMBER, true, 180000);
+    if (!pairingCode) throw new Error('WhatsApp no devolvio un codigo.');
+    return res.json({
+      ok: true,
+      pairingCode: String(pairingCode).replace(/\s/g, ''),
+      linkPhoneMasked: LINK_PHONE_NUMBER ? `***${LINK_PHONE_NUMBER.slice(-4)}` : '',
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    const errorMessage = String(error?.message || error || 'No fue posible generar el codigo.').slice(0, 500);
+    writeState('PAIRING_CODE_RETRY', {
+      qrAvailable: false,
+      linkPhoneMasked: LINK_PHONE_NUMBER ? `***${LINK_PHONE_NUMBER.slice(-4)}` : '',
+      error: errorMessage,
+    });
+    schedulePairingCodeRetry([LINK_PHONE_NUMBER, true, 180000]);
+    return res.status(503).json({ error: 'WhatsApp aun no permite generar otro codigo. Reintentando automaticamente.' });
+  }
 });
 api.use('/api/new-customers-info', createNewCustomersInfoRouter(newCustomersService));
 const apiServer = api.listen(API_PORT, '127.0.0.1', () => {
@@ -165,7 +242,25 @@ client.on('qr', (value) => {
   console.log('New Customers WhatsApp: QR listo para vincular la cuenta exclusiva de clientes nuevos.');
 });
 
+client.on('code', (value) => {
+  if (pairingRetryTimer) {
+    clearTimeout(pairingRetryTimer);
+    pairingRetryTimer = null;
+  }
+  removeQrFiles();
+  writeState('WAITING_FOR_PHONE_LINK', {
+    qrAvailable: false,
+    pairingCode: String(value || '').replace(/\s/g, ''),
+    linkPhoneMasked: LINK_PHONE_NUMBER ? `***${LINK_PHONE_NUMBER.slice(-4)}` : '',
+  });
+  console.log(`New Customers WhatsApp: codigo de vinculacion listo para ***${LINK_PHONE_NUMBER.slice(-4)}.`);
+});
+
 client.on('authenticated', () => {
+  if (pairingRetryTimer) {
+    clearTimeout(pairingRetryTimer);
+    pairingRetryTimer = null;
+  }
   writeState('AUTHENTICATED', { qrAvailable: fs.existsSync(QR_PNG_FILE) });
   console.log('New Customers WhatsApp: autenticación aceptada.');
 });
@@ -197,6 +292,7 @@ let shuttingDown = false;
 async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
+  if (pairingRetryTimer) clearTimeout(pairingRetryTimer);
   writeState('STOPPING', { signal });
   try { await new Promise((resolve) => apiServer.close(resolve)); } catch {}
   try { await client.destroy(); } catch {}

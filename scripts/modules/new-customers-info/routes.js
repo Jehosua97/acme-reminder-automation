@@ -2,6 +2,7 @@
 
 const express = require('express');
 const { LEAD_STATUSES } = require('./store');
+const { START_COMMAND, STOP_COMMAND, RESTART_COMMANDS, KOALENDAR_URL } = require('./engine');
 
 function createNewCustomersInfoRouter(service) {
   const router = express.Router();
@@ -9,12 +10,32 @@ function createNewCustomersInfoRouter(service) {
   router.get('/status', (req, res) => res.json({
     module: 'new-customers-info',
     enabled: true,
-    activationCommand: 'start bot',
-    activationCommands: ['start bot', 'iniciar bot'],
-    stopCommand: 'stop bot',
+    activationCommand: START_COMMAND,
+    activationCommands: [START_COMMAND],
+    stopCommand: STOP_COMMAND,
+    restartCommands: [...RESTART_COMMANDS],
+    schedulingUrl: KOALENDAR_URL,
     leadStatuses: LEAD_STATUSES,
     policy: service.policyInfo(),
   }));
+
+  router.patch('/mode', (req, res) => {
+    try {
+      if (typeof req.body?.testMode !== 'boolean') {
+        return res.status(400).json({ error: 'testMode debe ser true o false.' });
+      }
+      return res.json({ ok: true, policy: service.setTestMode(req.body.testMode) });
+    } catch (error) { return res.status(500).json({ error: error.message }); }
+  });
+
+  router.patch('/pause', (req, res) => {
+    try {
+      if (typeof req.body?.paused !== 'boolean') {
+        return res.status(400).json({ error: 'paused debe ser true o false.' });
+      }
+      return res.json({ ok: true, policy: service.setPaused(req.body.paused) });
+    } catch (error) { return res.status(500).json({ error: error.message }); }
+  });
 
   router.get('/stats', (req, res) => {
     try { res.json(service.store.stats()); }
@@ -51,8 +72,13 @@ function createNewCustomersInfoRouter(service) {
   });
 
   router.get('/properties', (req, res) => {
-    try { res.json({ properties: service.store.listProperties() }); }
+    try { res.json({ properties: service.store.listProperties(), writable: true }); }
     catch (error) { res.status(500).json({ error: error.message }); }
+  });
+
+  router.post('/properties', (req, res) => {
+    try { return res.status(201).json({ ok: true, property: service.store.createProperty(req.body || {}) }); }
+    catch (error) { return res.status(400).json({ error: error.message }); }
   });
 
   router.patch('/properties/:id', (req, res) => {
@@ -61,6 +87,14 @@ function createNewCustomersInfoRouter(service) {
       if (!property) return res.status(404).json({ error: 'Oferta no encontrada.' });
       return res.json({ ok: true, property });
     } catch (error) { return res.status(400).json({ error: error.message }); }
+  });
+
+  router.delete('/properties/:id', (req, res) => {
+    try {
+      const property = service.store.deleteProperty(req.params.id);
+      if (!property) return res.status(404).json({ error: 'Oferta no encontrada.' });
+      return res.json({ ok: true, deletedId: property.id });
+    } catch (error) { return res.status(500).json({ error: error.message }); }
   });
 
   router.get('/appointment-settings', (req, res) => {

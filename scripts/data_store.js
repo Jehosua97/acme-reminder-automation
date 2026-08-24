@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS = {
   serviceIntervalMs: 300000,
   sendWindowMinutes: 10,
   newCustomersTestMode: false,
+  newCustomersPaused: false,
 };
 const TIME_STEP_MINUTES = DEFAULT_SETTINGS.timeStepMinutes;
 const WEEKLY_STATUS_RESET_DAY = 0; // Domingo
@@ -127,6 +128,9 @@ function normalizeSettings(input = {}) {
     newCustomersTestMode: input.newCustomersTestMode === undefined
       ? DEFAULT_SETTINGS.newCustomersTestMode
       : bool(input.newCustomersTestMode),
+    newCustomersPaused: input.newCustomersPaused === undefined
+      ? DEFAULT_SETTINGS.newCustomersPaused
+      : bool(input.newCustomersPaused),
   };
 }
 

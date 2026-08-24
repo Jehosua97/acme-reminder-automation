@@ -1,6 +1,19 @@
 # Confort Place Operations Guide
 
-This guide covers the current production model: web dashboard, JSON data store, persistent WhatsApp worker, and NSSM Windows services.
+This guide covers the current production model: web dashboard, JSON data store, and the persistent WhatsApp workers.
+
+The web dashboard runs as the `ConfortPlace-Web` Windows service. Both WhatsApp accounts run in the interactive Windows user session so their WhatsApp Web profiles remain available. The scheduled task `ConfortPlace-WhatsApp-User` launches a guardian that keeps the reminders and new-customer workers running and recovers either one if it exits.
+
+## Automatic startup and recovery
+
+- The dashboard starts with Windows as the `ConfortPlace-Web` service, even before a user signs in.
+- NSSM restarts the Node dashboard process after 10 seconds if it exits. The install, repair, and reset scripts also configure Windows service recovery if NSSM itself fails.
+- WhatsApp starts 30 seconds after the Windows user signs in. This preserves access to the saved WhatsApp Web profiles without storing the Windows password.
+- The hidden guardian checks both WhatsApp supervisors every 30 seconds. Each supervisor also restarts its Node worker after an unexpected exit.
+- Guardian and worker launches use hidden windows or `CreateNoWindow`; they do not leave visible PowerShell, CMD, or Node terminals.
+- Supervisor logs rotate automatically so a repeated QR or network error cannot grow a single log without limit.
+
+Operational limits: the PC must remain powered, awake, and online. Windows does not have automatic sign-in enabled, so after a full reboot WhatsApp begins after the user signs in; the dashboard does not have this limitation. If WhatsApp invalidates a linked-device session, no restart mechanism can bypass that security step and the corresponding QR must be scanned once again.
 
 Legacy Excel and Windows Task Scheduler scripts were removed from `main`. They remain available in:
 
@@ -16,6 +29,7 @@ legacy-with-excel-scripts
 | Start dashboard manually | `npm run web` |
 | Start WhatsApp worker manually | `npm run service` |
 | Stop WhatsApp worker | `.\scripts\DetenerServicioWhatsApp.cmd` |
+| Install/repair automatic WhatsApp startup | `.\scripts\InstalarArranqueAutomaticoWhatsApp.cmd` |
 | Enable debug mode | `.\scripts\ActivarModoDebug.cmd` |
 | Enable production mode | `.\scripts\ActivarModoProduccion.cmd` |
 | Verify Windows services | `.\scripts\VerificarServiciosNSSM.cmd` |
@@ -197,6 +211,21 @@ Common causes:
 - PC sleep/hibernate.
 
 ## Service management
+
+Install or repair the automatic startup for both WhatsApp accounts (no administrator prompt is required for the current user task):
+
+```powershell
+.\scripts\InstalarArranqueAutomaticoWhatsApp.cmd
+```
+
+The `ConfortPlace-WhatsApp-User` task starts 30 seconds after the user signs in and keeps the guardian running. The separate hidden `ConfortPlace-WhatsApp-Watchdog` task verifies it every minute and restarts the main task if necessary. The guardian checks both WhatsApp supervisors every 30 seconds. Its operational files are:
+
+```text
+runtime/whatsapp_guardian.log
+runtime/whatsapp_guardian_status.json
+```
+
+The NSSM commands below manage the dashboard service and remain available for legacy installations of the reminders worker.
 
 Install services:
 

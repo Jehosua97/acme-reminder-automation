@@ -136,6 +136,9 @@ Write-Host 'Instalando servicio Web...' -ForegroundColor Cyan
 & $Nssm set $WebService AppExit Default Restart | Out-Null
 & $Nssm set $WebService AppThrottle 1500 | Out-Null
 & $Nssm set $WebService AppRestartDelay 10000 | Out-Null
+& $Nssm set $WebService AppNoConsole 1 | Out-Null
+& sc.exe failure $WebService 'reset=' 86400 'actions=' 'restart/5000/restart/10000/restart/30000' | Out-Null
+& sc.exe failureflag $WebService 1 | Out-Null
 
 Write-Host 'Instalando servicio WhatsApp...' -ForegroundColor Cyan
 & $Nssm install $WhatsAppService powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$ProjectRoot\scripts\IniciarServicioWhatsApp.ps1`"" | Out-Null
@@ -151,6 +154,9 @@ Write-Host 'Instalando servicio WhatsApp...' -ForegroundColor Cyan
 & $Nssm set $WhatsAppService AppExit Default Restart | Out-Null
 & $Nssm set $WhatsAppService AppThrottle 1500 | Out-Null
 & $Nssm set $WhatsAppService AppRestartDelay 10000 | Out-Null
+& $Nssm set $WhatsAppService AppNoConsole 1 | Out-Null
+& sc.exe failure $WhatsAppService 'reset=' 86400 'actions=' 'restart/5000/restart/10000/restart/30000' | Out-Null
+& sc.exe failureflag $WhatsAppService 1 | Out-Null
 if ($chrome) {
     & $Nssm set $WhatsAppService AppEnvironmentExtra "PUPPETEER_EXECUTABLE_PATH=$chrome" | Out-Null
 }

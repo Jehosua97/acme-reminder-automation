@@ -4,6 +4,7 @@ $Raiz = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Proyecto = Split-Path -Parent $Raiz
 $RutaRuntime = Join-Path $Proyecto 'runtime'
 $RutaLock = Join-Path $RutaRuntime 'servicio_programados.lock'
+$RutaSupervisorLock = Join-Path $RutaRuntime 'servicio_programados_supervisor.lock'
 $RutaSesion = Join-Path $Proyecto '.wwebjs_auth'
 $RutaPerfil = Join-Path $RutaSesion 'session-recordatorios-excel'
 $RutaPerfilNormalizada = $RutaPerfil -replace '\\', '/'
@@ -26,6 +27,15 @@ if (Test-Path -LiteralPath $RutaLock) {
         taskkill.exe /PID $pidInt /T /F | Out-Null
     }
     Remove-Item -LiteralPath $RutaLock -Force
+}
+
+if (Test-Path -LiteralPath $RutaSupervisorLock) {
+    $contenidoSupervisor = Get-Content -LiteralPath $RutaSupervisorLock
+    $pidSupervisor = ($contenidoSupervisor | Select-String -Pattern 'pid=(\d+)' | ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1)
+    if ($pidSupervisor) {
+        taskkill.exe /PID ([int]$pidSupervisor) /T /F | Out-Null
+    }
+    Remove-Item -LiteralPath $RutaSupervisorLock -Force
 }
 
 Get-CimInstance Win32_Process |

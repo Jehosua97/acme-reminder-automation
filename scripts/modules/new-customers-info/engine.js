@@ -3,9 +3,11 @@
 const { matchProperties } = require('./catalog');
 const { formatClock, formatDate } = require('./appointment-schedule');
 
-const START_COMMAND = 'start bot';
-const START_COMMAND_ALIASES = Object.freeze([START_COMMAND, 'iniciar bot', 'inciair bot', 'inicia bot']);
+const START_COMMAND = 'Welcome!';
+const START_COMMAND_ALIASES = Object.freeze(['welcome!']);
 const STOP_COMMAND = 'stop bot';
+const RESTART_COMMANDS = Object.freeze(['start again', 'iniciar de nuevo']);
+const KOALENDAR_URL = 'https://koalendar.com/e/meet-with-confort';
 
 function normalize(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
@@ -173,8 +175,23 @@ function nextActionPrompt(language, hasMatches) {
       : '¿Desea hablar con un miembro de nuestro equipo aquí en el chat? Responda PERSONA.';
   }
   return language === 'en'
-    ? 'Would you like to schedule a visit to this room?\n\nReply YES to schedule, NO to finish, or PERSON to speak with a team member here in the chat.'
-    : '¿Le gustaría agendar una visita a esta habitación?\n\nResponda SÍ para agendar, NO para finalizar o PERSONA para hablar con un miembro del equipo aquí en el chat.';
+    ? 'Would you like to see this property in person?\n\nReply YES to receive the booking link, NO to finish, or PERSON to speak with a team member here in the chat.'
+    : '¿Le gustaría ver esta propiedad en persona?\n\nResponda SÍ para recibir el enlace de reservación, NO para finalizar o PERSONA para hablar con un miembro del equipo aquí en el chat.';
+}
+
+function koalendarTransition(contact, answers, language) {
+  const message = language === 'en'
+    ? `Perfect! Please choose the date and time for your visit here:\n${KOALENDAR_URL}\n\nOnce you have booked your visit, that is all for now. If you would like to change your answers or start over, reply *start again* or *iniciar de nuevo*.`
+    : `¡Perfecto! Elija el día y la hora de su visita aquí:\n${KOALENDAR_URL}\n\nUna vez que haya agendado su visita, eso es todo por ahora. Si desea cambiar sus respuestas o comenzar otra vez, escriba *iniciar de nuevo* o *start again*.`;
+  return {
+    ...contact,
+    answers,
+    currentFieldId: null,
+    conversationStatus: 'COMPLETE',
+    leadStatus: 'INTERESADO',
+    outgoing: [message],
+    auditType: 'KOALENDAR_LINK_SENT',
+  };
 }
 
 function matchingOptions(contact, properties) {
@@ -447,7 +464,8 @@ function handleText(contact, incomingText, properties, appointmentAvailability) 
       return { ...contact, answers, currentFieldId: null, conversationStatus: 'COMPLETE', leadStatus: 'NO_INTERESADO', outgoing: [language === 'en' ? 'Thank you for contacting Confort Place. We are here if you need us later.' : 'Gracias por contactar a Confort Place. Aquí estaremos si nos necesita más adelante.'], auditType: 'LEAD_NOT_INTERESTED' };
     }
     if (isPositiveInterest(incomingText) || booleanFrom(incomingText) === true || propertyChoice(incomingText, matchingOptions(contact, properties))) {
-      return beginAppointment(contact, answers, language, properties, availability, incomingText, answers.selected_property_id);
+      if (answers.selected_property_id) return koalendarTransition(contact, answers, language);
+      return handoffTransition(contact, answers, language);
     }
     return { ...contact, answers, outgoing: [nextActionPrompt(language, (contact.matchIds || []).length > 0)], auditType: 'INVALID_ANSWER' };
   }
@@ -467,4 +485,13 @@ function handleText(contact, incomingText, properties, appointmentAvailability) 
   return { ...contact, answers, leadStatus: 'REQUIERE_ATENCION', outgoing: [], auditType: 'STAFF_REVIEW_REQUESTED' };
 }
 
-module.exports = { START_COMMAND, START_COMMAND_ALIASES, STOP_COMMAND, activate, handleText, normalize };
+module.exports = {
+  START_COMMAND,
+  START_COMMAND_ALIASES,
+  STOP_COMMAND,
+  RESTART_COMMANDS,
+  KOALENDAR_URL,
+  activate,
+  handleText,
+  normalize,
+};
