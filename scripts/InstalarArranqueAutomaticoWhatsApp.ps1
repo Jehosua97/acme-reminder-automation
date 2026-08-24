@@ -6,6 +6,9 @@ $ScriptsRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent $ScriptsRoot
 $GuardianScript = Join-Path $ScriptsRoot 'IniciarServiciosWhatsApp.ps1'
 $WatchdogScript = Join-Path $ScriptsRoot 'VerificarGuardianWhatsApp.ps1'
+$GuardianLauncher = Join-Path $ScriptsRoot 'IniciarServicioWhatsAppHidden.vbs'
+$WatchdogLauncher = Join-Path $ScriptsRoot 'VerificarGuardianWhatsAppHidden.vbs'
+$Wscript = Join-Path $env:SystemRoot 'System32\wscript.exe'
 
 if (-not (Test-Path -LiteralPath $GuardianScript)) {
     throw "No existe $GuardianScript"
@@ -13,12 +16,17 @@ if (-not (Test-Path -LiteralPath $GuardianScript)) {
 if (-not (Test-Path -LiteralPath $WatchdogScript)) {
     throw "No existe $WatchdogScript"
 }
+if (-not (Test-Path -LiteralPath $GuardianLauncher)) {
+    throw "No existe $GuardianLauncher"
+}
+if (-not (Test-Path -LiteralPath $WatchdogLauncher)) {
+    throw "No existe $WatchdogLauncher"
+}
 
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-$arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$GuardianScript`""
 $action = New-ScheduledTaskAction `
-    -Execute 'powershell.exe' `
-    -Argument $arguments `
+    -Execute $Wscript `
+    -Argument "`"$GuardianLauncher`"" `
     -WorkingDirectory $ProjectRoot
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
 $trigger.Delay = 'PT30S'
@@ -51,10 +59,9 @@ $task = New-ScheduledTask `
     -Settings $settings `
     -Description 'Ejecuta el guardian oculto de los WhatsApp de Confort Place despues de iniciar sesion.'
 
-$watchdogArguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$WatchdogScript`""
 $watchdogAction = New-ScheduledTaskAction `
-    -Execute 'powershell.exe' `
-    -Argument $watchdogArguments `
+    -Execute $Wscript `
+    -Argument "`"$WatchdogLauncher`"" `
     -WorkingDirectory $ProjectRoot
 $watchdogSettings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
@@ -69,7 +76,7 @@ $watchdogTask = New-ScheduledTask `
     -Trigger @($watchdogLogonTrigger, $watchdogRecoveryTrigger) `
     -Principal $principal `
     -Settings $watchdogSettings `
-    -Description 'Comprueba cada minuto que el guardian de WhatsApp siga activo y lo recupera si hace falta.'
+    -Description 'Comprueba cada minuto, sin crear ventanas, que el guardian de WhatsApp siga activo y lo recupera si hace falta.'
 
 Register-ScheduledTask -TaskName $TaskName -InputObject $task -Force | Out-Null
 Register-ScheduledTask -TaskName $WatchdogTaskName -InputObject $watchdogTask -Force | Out-Null
